@@ -1,10 +1,12 @@
 package sysroot
 
 import (
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
@@ -50,12 +52,25 @@ type SimpleK8s struct {
 }
 
 func getDevices() ([]string, error) {
-	disks := make([]string, 0)
+	wait := true
+	retries := 10
 	prefix := "/dev/block"
+	disks := []string{}
 
-	fis, err := ioutil.ReadDir(prefix)
-	if err != nil {
-		return disks, err
+	var fis []fs.FileInfo
+	var err error
+	for {
+		fis, err = ioutil.ReadDir(prefix)
+		if err != nil {
+			if wait && retries >= 0 {
+				retries--
+				log.Debug("waiting for " + prefix)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			return disks, err
+		}
+		break
 	}
 
 	for _, fi := range fis {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,28 +17,28 @@ import (
 )
 
 type Directory struct {
-	path string
-	mode fs.FileMode
-	uid  int
-	gid  int
+	Path string
+	Mode fs.FileMode
+	Uid  int
+	Gid  int
 }
 
 type File struct {
-	overwrite bool
-	filename  string
-	content   []byte
-	mode      fs.FileMode
-	uid       int
-	gid       int
+	Overwrite bool
+	Filename  string
+	Content   []byte
+	Mode      fs.FileMode
+	Uid       int
+	Gid       int
 }
 
 type Sysroot struct {
-	path        string
-	shadows     []passwd.Shadow
-	groups      []passwd.Group
-	users       []passwd.User
-	directories []Directory
-	files       []File
+	Path        string
+	Shadows     []passwd.Shadow
+	Groups      []passwd.Group
+	Users       []passwd.User
+	Directories []Directory
+	Files       []File
 }
 
 func isIntInList(value int, list []int) bool {
@@ -138,14 +139,14 @@ func (sysroot *Sysroot) parseYAMLGroups(simpleK8s SimpleK8s) error {
 		if group.Gid != nil {
 			gid = *group.Gid
 		} else {
-			gid = getNextGid(sysroot.groups, isSystem)
+			gid = getNextGid(sysroot.Groups, isSystem)
 		}
 
 		group := passwd.Group{
 			Name: group.Name,
 			Gid:  gid,
 		}
-		sysroot.groups = updateOrAppendGroup(sysroot.groups, group)
+		sysroot.Groups = updateOrAppendGroup(sysroot.Groups, group)
 	}
 	return nil
 }
@@ -173,13 +174,13 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s SimpleK8s) error {
 			if user.Uid != nil {
 				uid = *user.Uid
 			} else {
-				uid = getNextUid(sysroot.users, isSystem)
+				uid = getNextUid(sysroot.Users, isSystem)
 			}
 
 			if user.Gid != nil {
 				uid = *user.Gid
 			} else {
-				gid = getNextGid(sysroot.groups, isSystem)
+				gid = getNextGid(sysroot.Groups, isSystem)
 			}
 		}
 
@@ -191,7 +192,7 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s SimpleK8s) error {
 			Home:     home,
 			Shell:    shell,
 		}
-		sysroot.users = updateOrAppendUser(sysroot.users, passwdUser)
+		sysroot.Users = updateOrAppendUser(sysroot.Users, passwdUser)
 
 		// Update shadow instance
 		if user.PasswordHash != nil {
@@ -199,26 +200,26 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s SimpleK8s) error {
 				Name:     user.Name,
 				Password: *user.PasswordHash,
 			}
-			sysroot.shadows = updateOrAppendShadow(sysroot.shadows, passwdShadow)
+			sysroot.Shadows = updateOrAppendShadow(sysroot.Shadows, passwdShadow)
 		}
 
 		// Update groups instances
 		for _, groupName := range user.Groups {
 			found := false
 			// Try to update an already defined group
-			for index := range sysroot.groups {
-				if groupName == sysroot.groups[index].Name {
+			for index := range sysroot.Groups {
+				if groupName == sysroot.Groups[index].Name {
 					found = true
-					sysroot.groups[index].UserList = append(sysroot.groups[index].UserList, passwdUser.Name)
+					sysroot.Groups[index].UserList = append(sysroot.Groups[index].UserList, passwdUser.Name)
 					break
 				}
 			}
 			// Or create a new group
 			if !found {
-				sysroot.groups = append(sysroot.groups, passwd.Group{
+				sysroot.Groups = append(sysroot.Groups, passwd.Group{
 					Name:     groupName,
 					Password: "",
-					Gid:      getNextGid(sysroot.groups, isSystem),
+					Gid:      getNextGid(sysroot.Groups, isSystem),
 					UserList: []string{passwdUser.Name},
 				})
 			}
@@ -231,18 +232,18 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s SimpleK8s) error {
 				content += fmt.Sprintln(sshPublicKey)
 			}
 			if len(content) > 0 {
-				sysroot.directories = append(sysroot.directories, Directory{
-					path: home + "/.ssh",
-					mode: 0700,
-					uid:  uid,
-					gid:  gid,
+				sysroot.Directories = append(sysroot.Directories, Directory{
+					Path: home + "/.ssh",
+					Mode: 0700,
+					Uid:  uid,
+					Gid:  gid,
 				})
-				sysroot.files = append(sysroot.files, File{
-					filename: home + "/.ssh/authorized_keys",
-					content:  []byte(content),
-					mode:     0600,
-					uid:      uid,
-					gid:      gid,
+				sysroot.Files = append(sysroot.Files, File{
+					Filename: home + "/.ssh/authorized_keys",
+					Content:  []byte(content),
+					Mode:     0600,
+					Uid:      uid,
+					Gid:      gid,
 				})
 			}
 		}
@@ -307,7 +308,7 @@ func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s SimpleK8s) error {
 		uid := 0
 		gid := 0
 		if directory.Owner != nil {
-			uid, gid = getUidGidFromString(*directory.Owner, sysroot.groups, sysroot.users)
+			uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
 		}
 
 		var mode fs.FileMode = 0775
@@ -319,11 +320,11 @@ func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s SimpleK8s) error {
 			}
 		}
 
-		sysroot.directories = append(sysroot.directories, Directory{
-			path: directory.Path,
-			mode: mode,
-			uid:  uid,
-			gid:  gid,
+		sysroot.Directories = append(sysroot.Directories, Directory{
+			Path: directory.Path,
+			Mode: mode,
+			Uid:  uid,
+			Gid:  gid,
 		})
 	}
 	return nil
@@ -341,7 +342,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s SimpleK8s) error {
 		uid := 0
 		gid := 0
 		if file.Permissions != nil {
-			uid, gid = getUidGidFromString(*file.Permissions, sysroot.groups, sysroot.users)
+			uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
 		}
 
 		var mode fs.FileMode = 0644
@@ -366,19 +367,19 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s SimpleK8s) error {
 			}
 		}
 
-		sysroot.files = append(sysroot.files, File{
-			overwrite: isOverwrite,
-			filename:  filename,
-			content:   content,
-			mode:      mode,
-			uid:       uid,
-			gid:       gid,
+		sysroot.Files = append(sysroot.Files, File{
+			Overwrite: isOverwrite,
+			Filename:  filename,
+			Content:   content,
+			Mode:      mode,
+			Uid:       uid,
+			Gid:       gid,
 		})
 	}
 	return nil
 }
 
-func (sysroot *Sysroot) ParseYAML(simpleK8s SimpleK8s) error {
+func (sysroot *Sysroot) parseYAML(simpleK8s SimpleK8s) error {
 	if err := sysroot.parseYAMLGroups(simpleK8s); err != nil {
 		return err
 	}
@@ -422,7 +423,7 @@ func (sysroot *Sysroot) parseFilenameShadow(filename string) error {
 			}).Error(err)
 			return err
 		}
-		sysroot.shadows = updateOrAppendShadow(sysroot.shadows, shadow)
+		sysroot.Shadows = updateOrAppendShadow(sysroot.Shadows, shadow)
 		return nil
 	})
 }
@@ -437,7 +438,7 @@ func (sysroot *Sysroot) parseFilenameGroup(filename string) error {
 			}).Error(err)
 			return err
 		}
-		sysroot.groups = updateOrAppendGroup(sysroot.groups, group)
+		sysroot.Groups = updateOrAppendGroup(sysroot.Groups, group)
 		return nil
 	})
 }
@@ -452,15 +453,15 @@ func (sysroot *Sysroot) parseFilenamePasswd(filename string) error {
 			}).Error(err)
 			return err
 		}
-		sysroot.users = updateOrAppendUser(sysroot.users, user)
+		sysroot.Users = updateOrAppendUser(sysroot.Users, user)
 		return nil
 	})
 }
 
-func (sysroot *Sysroot) ParseFiles() error {
+func (sysroot *Sysroot) parseFiles() error {
 	var filename string
 
-	filename = sysroot.path + "/etc/shadow"
+	filename = sysroot.Path + "/etc/shadow"
 	if err := sysroot.parseFilenameShadow(filename); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
@@ -468,7 +469,7 @@ func (sysroot *Sysroot) ParseFiles() error {
 		}).Error(err)
 	}
 
-	filename = sysroot.path + "/etc/group"
+	filename = sysroot.Path + "/etc/group"
 	if err := sysroot.parseFilenameGroup(filename); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
@@ -476,7 +477,7 @@ func (sysroot *Sysroot) ParseFiles() error {
 		}).Error(err)
 	}
 
-	filename = sysroot.path + "/etc/passwd"
+	filename = sysroot.Path + "/etc/passwd"
 	if err := sysroot.parseFilenamePasswd(filename); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
@@ -505,10 +506,10 @@ func writeFile(filename string, content []byte, mode fs.FileMode) error {
 }
 
 func writeFileEtcShadow(sysroot Sysroot) error {
-	filename := sysroot.path + "/etc/shadow"
+	filename := sysroot.Path + "/etc/shadow"
 	mode := fs.FileMode(0600)
 	content := ""
-	for _, shadow := range sysroot.shadows {
+	for _, shadow := range sysroot.Shadows {
 		if line, err := shadow.Marshal(); err != nil {
 			return err
 		} else {
@@ -519,10 +520,10 @@ func writeFileEtcShadow(sysroot Sysroot) error {
 }
 
 func writeFileEtcGroup(sysroot Sysroot) error {
-	filename := sysroot.path + "/etc/group"
+	filename := sysroot.Path + "/etc/group"
 	mode := fs.FileMode(0644)
 	content := ""
-	for _, group := range sysroot.groups {
+	for _, group := range sysroot.Groups {
 		if line, err := group.Marshal(); err != nil {
 			return err
 		} else {
@@ -533,10 +534,10 @@ func writeFileEtcGroup(sysroot Sysroot) error {
 }
 
 func writeFileEtcPasswd(sysroot Sysroot) error {
-	filename := sysroot.path + "/etc/passwd"
+	filename := sysroot.Path + "/etc/passwd"
 	mode := fs.FileMode(0644)
 	content := ""
-	for _, user := range sysroot.users {
+	for _, user := range sysroot.Users {
 		if line, err := user.Marshal(); err != nil {
 			return err
 		} else {
@@ -547,11 +548,11 @@ func writeFileEtcPasswd(sysroot Sysroot) error {
 }
 
 func writeDirectories(sysroot Sysroot) error {
-	for _, directory := range sysroot.directories {
-		if err := os.MkdirAll(sysroot.path+directory.path, directory.mode); err != nil {
+	for _, directory := range sysroot.Directories {
+		if err := os.MkdirAll(sysroot.Path+directory.Path, directory.Mode); err != nil {
 			return err
 		}
-		if err := os.Chown(sysroot.path+directory.path, directory.uid, directory.uid); err != nil {
+		if err := os.Chown(sysroot.Path+directory.Path, directory.Uid, directory.Uid); err != nil {
 			return err
 		}
 	}
@@ -559,36 +560,36 @@ func writeDirectories(sysroot Sysroot) error {
 }
 
 func writeFiles(sysroot Sysroot) error {
-	for _, file := range sysroot.files {
-		filename := sysroot.path + file.filename
+	for _, file := range sysroot.Files {
+		filename := sysroot.Path + file.Filename
 
 		// If overwrite == false and file exists, skip it
-		if !file.overwrite {
+		if !file.Overwrite {
 			if _, err := os.Stat(filename); err == nil {
 				continue
 			}
 		}
 
-		if err := os.WriteFile(filename, file.content, file.mode); err != nil {
+		if err := os.WriteFile(filename, file.Content, file.Mode); err != nil {
 			return err
 		}
-		if err := os.Chmod(filename, file.mode); err != nil {
+		if err := os.Chmod(filename, file.Mode); err != nil {
 			return err
 		}
-		if err := os.Chown(filename, file.uid, file.gid); err != nil {
+		if err := os.Chown(filename, file.Uid, file.Gid); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (sysroot *Sysroot) Write() error {
+func (sysroot *Sysroot) write() error {
 	log.WithFields(log.Fields{
-		"shadows":     sysroot.shadows,
-		"groups":      sysroot.groups,
-		"users":       sysroot.users,
-		"directories": sysroot.directories,
-		"files":       sysroot.files,
+		"shadows":     sysroot.Shadows,
+		"groups":      sysroot.Groups,
+		"users":       sysroot.Users,
+		"directories": sysroot.Directories,
+		"files":       sysroot.Files,
 	}).Debug()
 
 	if err := writeFileEtcShadow(*sysroot); err != nil {
@@ -616,18 +617,22 @@ func (sysroot *Sysroot) Write() error {
 
 func New(path string) (*Sysroot, error) {
 	if len(path) == 0 {
-		return nil, errors.New("path is required")
+		err := errors.New("path is required")
+		log.WithFields(log.Fields{
+			"path": path,
+		}).Panic(err)
+		return nil, err
 	}
 
 	result := Sysroot{
-		path: path,
-		shadows: []passwd.Shadow{
+		Path: path,
+		Shadows: []passwd.Shadow{
 			{
 				Name:     "root",
 				Password: "!!",
 			},
 		},
-		groups: []passwd.Group{
+		Groups: []passwd.Group{
 			{
 				Name:     "root",
 				Password: "",
@@ -635,7 +640,7 @@ func New(path string) (*Sysroot, error) {
 				UserList: []string{},
 			},
 		},
-		users: []passwd.User{
+		Users: []passwd.User{
 			{
 				Name: "root",
 				Uid:  0,
@@ -652,41 +657,80 @@ func New(path string) (*Sysroot, error) {
 	return &result, nil
 }
 
-func YamlParser() {
+func (sysroot *Sysroot) YamlParser() error {
 	log.Debug("init simplek8s.yaml parser")
 
 	simpleK8s := SimpleK8s{}
 	if err := GetYamlSimpleK8s(&simpleK8s); err != nil {
-		log.WithField("simpleK8s", simpleK8s).Panic(err)
+		log.WithField("simpleK8s", simpleK8s).Error(err)
+		return err
 	}
 
-	sysrootPath := "/"
-	var sysrootGenerator Sysroot
-	if pointer, err := New(sysrootPath); err != nil {
+	if err := sysroot.parseFiles(); err != nil {
 		log.WithFields(log.Fields{
-			"sysroot": sysrootGenerator,
-		}).Panic(err)
-	} else {
-		sysrootGenerator = *pointer
+			"sysroot": sysroot,
+		}).Error(err)
+		return err
 	}
 
-	if err := sysrootGenerator.ParseFiles(); err != nil {
-		log.WithFields(log.Fields{
-			"sysroot": sysrootGenerator,
-		}).Panic(err)
-	}
-
-	if err := sysrootGenerator.ParseYAML(simpleK8s); err != nil {
+	if err := sysroot.parseYAML(simpleK8s); err != nil {
 		log.WithFields(log.Fields{
 			"simpleK8s": simpleK8s,
-			"sysroot":   sysrootGenerator,
-		}).Panic(err)
+			"sysroot":   sysroot,
+		}).Error(err)
+		return err
 	}
 
-	if err := sysrootGenerator.Write(); err != nil {
+	if err := sysroot.write(); err != nil {
 		log.WithFields(log.Fields{
 			"simpleK8s": simpleK8s,
-			"sysroot":   sysrootGenerator,
-		}).Panic(err)
+			"sysroot":   sysroot,
+		}).Error(err)
+		return err
 	}
+	return nil
+}
+
+func (sysroot *Sysroot) Populate() error {
+	symlinks := [][]string{
+		{"usr/bin", sysroot.Path + "/bin"},
+		{"usr/lib", sysroot.Path + "/lib"},
+		{"lib", sysroot.Path + "/lib64"},
+		{"usr/sbin", sysroot.Path + "/sbin"},
+	}
+	for _, symlink := range symlinks {
+		os.Remove(symlink[1])
+		if err := os.Symlink(symlink[0], symlink[1]); err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+
+	toCopy := [][]string{
+		{"/usr", sysroot.Path + "/"},
+		{"/etc/ssl/certs", sysroot.Path + "/etc/ssl/"},
+		{"/usr/share/factory/etc", sysroot.Path + "/"},
+	}
+	for _, tC := range toCopy {
+		if err := os.MkdirAll(tC[1], 0755); err != nil {
+			log.WithFields(log.Fields{
+				"mkdir": tC[1],
+			}).Error(err)
+			return err
+		}
+
+		cmd := exec.Command("cp", "-pan", tC[0], tC[1])
+		if output, err := cmd.CombinedOutput(); err != nil {
+			log.WithFields(log.Fields{
+				"cmd":    "cp",
+				"arg1":   "-panv",
+				"arg2":   tC[0],
+				"arg3":   tC[1],
+				"output": string(output),
+			}).Error(err)
+			return err
+		}
+	}
+
+	return nil
 }

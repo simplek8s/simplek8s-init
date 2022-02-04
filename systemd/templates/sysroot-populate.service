@@ -14,12 +14,4 @@ DefaultDependencies=no
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/env sh -ec '\
-    ln -sf usr/bin /sysroot/bin;\
-    ln -sf usr/lib /sysroot/lib;\
-    ln -sf lib /sysroot/lib64;\
-    ln -sf usr/sbin /sysroot/sbin;\
-    mkdir -p /sysroot/usr;\
-    tar -C /usr/ -cf - . | tar -C /sysroot/usr/ -xf -;\
-    cp -pan /etc/ssl /sysroot/etc/;\
-    cp -pan /sysroot/usr/share/factory/* /sysroot/'
+ExecStart=/usr/lib/systemd/system-generators/simplek8s-firstboot populate /sysroot

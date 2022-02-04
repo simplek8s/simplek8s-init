@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/fs"
 	"os"
 	"strconv"
 
@@ -29,53 +28,39 @@ func main() {
 
 	if len(os.Args) == 4 {
 		// https://www.freedesktop.org/software/systemd/man/systemd.generator.html#Description
-		pathnameNormal := os.Args[1]
-		pathnameEarly := os.Args[2]
-		pathnameLate := os.Args[3]
-		var statNormal fs.FileInfo
-		var statEarly fs.FileInfo
-		var statLate fs.FileInfo
+		if stat, err := os.Stat(os.Args[1]); err != nil {
+			log.WithField("path", os.Args[1]).Panic(err)
+		} else if isDir := stat.IsDir(); !isDir {
+			log.WithFields(log.Fields{
+				"path":  os.Args[1],
+				"isDir": isDir,
+			}).Panic("must be called from systemd")
+		}
+		if err := systemd.SystemdGenerator(os.Args[1]); err != nil {
+			panic(err)
+		}
+	} else if len(os.Args) == 3 && (os.Args[1] == "populate" || os.Args[1] == "configurator") {
+		var sr *sysroot.Sysroot
 		var err error
-		statNormal, err = os.Stat(pathnameNormal)
-		if err != nil {
+		if stat, err := os.Stat(os.Args[2]); err != nil || !stat.IsDir() {
 			log.WithFields(log.Fields{
-				"pathnameNormal": pathnameNormal,
-				"pathnameEarly":  pathnameEarly,
-				"pathnameLate":   pathnameLate,
+				"path":  os.Args[2],
+				"isDir": stat.IsDir(),
 			}).Panic(err)
 		}
-		statEarly, err = os.Stat(pathnameEarly)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"pathnameNormal": pathnameNormal,
-				"pathnameEarly":  pathnameEarly,
-				"pathnameLate":   pathnameLate,
-			}).Panic(err)
+		if sr, err = sysroot.New(os.Args[2]); err != nil {
+			panic(err)
 		}
-		statLate, err = os.Stat(pathnameLate)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"pathnameNormal": pathnameNormal,
-				"pathnameEarly":  pathnameEarly,
-				"pathnameLate":   pathnameLate,
-			}).Panic(err)
+		switch os.Args[1] {
+		case "populate":
+			if err := sr.Populate(); err != nil {
+				panic(err)
+			}
+		case "configurator":
+			if err := sr.YamlParser(); err != nil {
+				panic(err)
+			}
 		}
-		isDirNormal := statNormal.IsDir()
-		isDirEarly := statEarly.IsDir()
-		isDirLate := statLate.IsDir()
-		if !isDirNormal || !isDirEarly || !isDirLate {
-			log.WithFields(log.Fields{
-				"pathnameNormal": pathnameNormal,
-				"pathnameEarly":  pathnameEarly,
-				"pathnameLate":   pathnameLate,
-				"isDirNormal":    isDirNormal,
-				"isDirEarly":     isDirEarly,
-				"isDirLate":      isDirLate,
-			}).Panic("must be called as systemd generator")
-		}
-		systemd.SystemdGenerator(pathnameNormal)
-	} else {
-		sysroot.YamlParser()
 	}
 
 	log.Debug("done")
