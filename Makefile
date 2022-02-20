@@ -40,6 +40,21 @@ publish_arm64: build_arm64
 
 publish: publish_amd64 publish_arm64
 
+test:
+	go test -v ./... -cover
+
+coverage.out:
+	go test \
+		-covermode=count \
+		-coverprofile ${BUILD_DIR}/coverage.txt \
+		$(shell go list ./... | grep -v /vendor/ | tr '\n' ' ')
+
+cover: coverage.out
+	go tool cover -func=${BUILD_DIR}/coverage.txt
+
+cover-html: coverage.out
+	go tool cover -html=${BUILD_DIR}/coverage.txt
+
 clean:
 	go clean
 	rm -rf "${BUILD_DIR}"

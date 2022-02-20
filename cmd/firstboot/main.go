@@ -53,7 +53,7 @@ func main() {
 		}
 		switch os.Args[1] {
 		case "populate":
-			if err := sr.Populate(); err != nil {
+			if err := sysroot.Populate(sr.Path); err != nil {
 				panic(err)
 			}
 		case "configurator":

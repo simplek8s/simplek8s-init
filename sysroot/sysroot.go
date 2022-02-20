@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -688,49 +687,5 @@ func (sysroot *Sysroot) YamlParser() error {
 		}).Error(err)
 		return err
 	}
-	return nil
-}
-
-func (sysroot *Sysroot) Populate() error {
-	symlinks := [][]string{
-		{"usr/bin", sysroot.Path + "/bin"},
-		{"usr/lib", sysroot.Path + "/lib"},
-		{"lib", sysroot.Path + "/lib64"},
-		{"usr/sbin", sysroot.Path + "/sbin"},
-	}
-	for _, symlink := range symlinks {
-		os.Remove(symlink[1])
-		if err := os.Symlink(symlink[0], symlink[1]); err != nil {
-			log.Error(err)
-			return err
-		}
-	}
-
-	toCopy := [][]string{
-		{"/usr", sysroot.Path + "/"},
-		{"/etc/ssl/certs", sysroot.Path + "/etc/ssl/"},
-		{"/usr/share/factory/etc", sysroot.Path + "/"},
-	}
-	for _, tC := range toCopy {
-		if err := os.MkdirAll(tC[1], 0755); err != nil {
-			log.WithFields(log.Fields{
-				"mkdir": tC[1],
-			}).Error(err)
-			return err
-		}
-
-		cmd := exec.Command("cp", "-pan", tC[0], tC[1])
-		if output, err := cmd.CombinedOutput(); err != nil {
-			log.WithFields(log.Fields{
-				"cmd":    "cp",
-				"arg1":   "-panv",
-				"arg2":   tC[0],
-				"arg3":   tC[1],
-				"output": string(output),
-			}).Error(err)
-			return err
-		}
-	}
-
 	return nil
 }
