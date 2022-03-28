@@ -6,11 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-func createFileMode(x fs.FileMode) *fs.FileMode {
-	return &x
-}
+	"github.com/openlyinc/pointy"
+)
 
 type fsType int
 
@@ -50,7 +48,7 @@ var testFS = []struct {
 		fsType: fsType_FILE,
 		name:   "executableFileE",
 		data:   []byte("#!/bin/sh\necho \"I'm a executable file\"\n"),
-		perm:   createFileMode(0755),
+		perm:   (*fs.FileMode)(pointy.Uint32(0755)),
 	},
 	{
 		fsType: fsType_DIRECTORY,

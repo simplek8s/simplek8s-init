@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/jlsalvador/simplek8s/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,6 +29,7 @@ func copyAll(source string, destination string) error {
 		return err
 	}
 
+	//TODO: Replace `cp` command by native Golang
 	cmd := exec.Command("cp", "-pan", source, destination)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		log.WithFields(log.Fields{
@@ -40,7 +42,12 @@ func copyAll(source string, destination string) error {
 	return nil
 }
 
+// Will populate sysroot
 func Populate(output string) error {
+	if err := common.IsDir(output); err != nil {
+		return err
+	}
+
 	type srcDst struct {
 		source      string
 		destination string

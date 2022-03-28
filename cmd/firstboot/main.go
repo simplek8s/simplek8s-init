@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 
@@ -16,51 +17,59 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+const (
+	OPERATION_NONE int = iota
+	OPERATION_SYSTEMD
+	OPERATION_POPULATE
+	OPERATION_CONFIGURATOR
+)
+
+func getOperation(args []string) int {
+	log.WithFields(log.Fields{
+		"args": args,
+	}).Debug()
+
+	operation := OPERATION_NONE
+	switch len(args) {
+	case 4:
+		operation = OPERATION_SYSTEMD
+	case 3:
+		switch args[1] {
+		case "populate":
+			operation = OPERATION_POPULATE
+		case "configurator":
+			operation = OPERATION_CONFIGURATOR
+		}
+	}
+	return operation
+}
+
+func printUsage() {
+	fmt.Println(`SimpleK8s Firstboot
+This program do not support to be executed by the user.`)
+}
+
 func main() {
 	if debug, _ := strconv.ParseBool(getEnv("DEBUG", "true")); debug {
 		log.SetLevel(log.DebugLevel)
 		log.SetReportCaller(true)
 	}
 
-	log.WithFields(log.Fields{
-		"args": os.Args,
-	}).Debug()
-
-	if len(os.Args) == 4 {
-		// https://www.freedesktop.org/software/systemd/man/systemd.generator.html#Description
-		if stat, err := os.Stat(os.Args[1]); err != nil {
-			log.WithField("path", os.Args[1]).Panic(err)
-		} else if isDir := stat.IsDir(); !isDir {
-			log.WithFields(log.Fields{
-				"path":  os.Args[1],
-				"isDir": isDir,
-			}).Panic("must be called from systemd")
-		}
+	switch getOperation(os.Args) {
+	case OPERATION_SYSTEMD:
 		if err := systemd.SystemdGenerator(os.Args[1]); err != nil {
 			panic(err)
 		}
-	} else if len(os.Args) == 3 && (os.Args[1] == "populate" || os.Args[1] == "configurator") {
-		var sr *sysroot.Sysroot
-		var err error
-		if stat, err := os.Stat(os.Args[2]); err != nil || !stat.IsDir() {
-			log.WithFields(log.Fields{
-				"path":  os.Args[2],
-				"isDir": stat.IsDir(),
-			}).Panic(err)
-		}
-		if sr, err = sysroot.New(os.Args[2]); err != nil {
+	case OPERATION_POPULATE:
+		if err := sysroot.Populate(os.Args[2]); err != nil {
 			panic(err)
 		}
-		switch os.Args[1] {
-		case "populate":
-			if err := sysroot.Populate(sr.Path); err != nil {
-				panic(err)
-			}
-		case "configurator":
-			if err := sr.YamlParser(); err != nil {
-				panic(err)
-			}
+	case OPERATION_CONFIGURATOR:
+		if err := sysroot.Configure(os.Args[2]); err != nil {
+			panic(err)
 		}
+	default:
+		printUsage()
 	}
 
 	log.Debug("done")

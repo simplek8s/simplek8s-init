@@ -1,15 +1,14 @@
-package sysroot
+package yaml
 
 import (
-	"io/fs"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/jlsalvador/simplek8s/linux/procfs"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -29,52 +28,48 @@ type SimpleK8s struct {
 		Groups            []string `yaml:"groups,omitempty"`
 		System            *bool    `yaml:"system,omitempty"`
 	} `yaml:"users,omitempty"`
-	Directories []struct {
-		Path        string  `yaml:"path,omitempty"`
-		Overwrite   bool    `yaml:"overwrite,omitempty"`
-		Owner       *string `yaml:"owner,omitempty"`
-		Permissions *string `yaml:"permissions,omitempty"`
-	} `yaml:"directories,omitempty"`
-	Files []struct {
-		Path        string  `yaml:"path,omitempty"`
-		Overwrite   *bool   `yaml:"overwrite,omitempty"`
-		Encoding    *string `yaml:"encoding,omitempty"`
-		Content     *string `yaml:"content,omitempty"`
-		Owner       *string `yaml:"owner,omitempty"`
-		Permissions *string `yaml:"permissions,omitempty"`
-	} `yaml:"files,omitempty"`
-	Links []struct {
-		Path      string  `yaml:"path,omitempty"`
-		Overwrite bool    `yaml:"overwrite,omitempty"`
-		Target    *string `yaml:"target,omitempty"`
-		Hard      bool    `yaml:"hard,omitempty"`
-	} `yaml:"links,omitempty"`
+	Storage struct {
+		Mounts []struct {
+			What    string  `yaml:"what,omitempty"`
+			Where   string  `yaml:"where,omitempty"`
+			Type    *string `yaml:"type,omitempty"`
+			Options *string `yaml:"options,omitempty"`
+		} `yaml:"mounts,omitempty"`
+		Links []struct {
+			Overwrite *bool   `yaml:"overwrite,omitempty"`
+			Path      string  `yaml:"path,omitempty"`
+			Target    string  `yaml:"target,omitempty"`
+			Owner     *string `yaml:"owner,omitempty"`
+			Hard      *bool   `yaml:"hard,omitempty"`
+		} `yaml:"links,omitempty"`
+		Directories []struct {
+			Overwrite   *bool   `yaml:"overwrite,omitempty"`
+			Path        string  `yaml:"path,omitempty"`
+			Owner       *string `yaml:"owner,omitempty"`
+			Permissions *string `yaml:"permissions,omitempty"`
+		} `yaml:"directories,omitempty"`
+		Files []struct {
+			Overwrite   *bool   `yaml:"overwrite,omitempty"`
+			Path        string  `yaml:"path,omitempty"`
+			Encoding    *string `yaml:"encoding,omitempty"`
+			Content     *string `yaml:"content,omitempty"`
+			Owner       *string `yaml:"owner,omitempty"`
+			Permissions *string `yaml:"permissions,omitempty"`
+		} `yaml:"files,omitempty"`
+	} `yaml:"storage,omitempty"`
 }
 
 func getDevices() ([]string, error) {
-	wait := true
-	retries := 10
-	prefix := "/dev/block"
+	var err error
 	disks := []string{}
 
-	var fis []fs.FileInfo
-	var err error
-	for {
-		fis, err = ioutil.ReadDir(prefix)
-		if err != nil {
-			if wait && retries >= 0 {
-				retries--
-				log.Debug("waiting for " + prefix)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			return disks, err
-		}
-		break
+	partitions, err := procfs.ParsePartitions()
+	if err != nil {
+		return nil, err
 	}
 
-	for _, fi := range fis {
-		disks = append(disks, prefix+"/"+fi.Name())
+	for _, partition := range partitions {
+		disks = append(disks, "/dev/"+partition.Name)
 	}
 
 	return disks, nil
@@ -177,9 +172,9 @@ func getYamlContent() ([]byte, error) {
 	return nil, nil
 }
 
-// Search across all FAT32 partitions the simplek8s.yaml and returns
-// it as a `SimpleK8s` type struct.
-func GetYamlSimpleK8s(simpleK8s *SimpleK8s) error {
+// Search across all FAT32 partitions the `simplek8s.yaml` file and
+// returns it as a `SimpleK8s` type struct.
+func GetYamlSimpleK8s() (*SimpleK8s, error) {
 
 	// Search for `simplek8s.yaml` content across all FAT32 partitions
 	b, err := getYamlContent()
@@ -187,23 +182,24 @@ func GetYamlSimpleK8s(simpleK8s *SimpleK8s) error {
 		log.WithFields(log.Fields{
 			"content": string(b),
 		}).Warn(err)
-		return err
+		return nil, err
 	}
 	if b == nil {
 		log.WithFields(log.Fields{
 			"content": string(b),
 		}).Warn("simplek8s.yaml is empty")
-		return nil
+		return nil, nil
 	}
 
 	// Unmarshal the yaml content
+	simpleK8s := new(SimpleK8s)
 	if err := yaml.Unmarshal(b, &simpleK8s); err != nil {
 		log.WithFields(log.Fields{
 			"content": string(b),
 		}).Warn(err)
-		return err
+		return nil, err
 	}
 
 	log.WithField("GetYamlSimpleK8s", simpleK8s).Info()
-	return nil
+	return simpleK8s, nil
 }

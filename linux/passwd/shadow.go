@@ -12,31 +12,64 @@ import (
 type Shadow struct {
 	// It is your login name.
 	Name string
+
 	// It is your encrypted password. The password should be minimum
 	// 8-12 characters long including special characters, digits,
 	// lower case alphabetic and more. Usually password format is set
 	// to `$id$salt$hashed`.
 	Password string
+
 	// Days since Jan 1, 1970 that password was last changed.
 	LastChanged *int
+
 	// The minimum number of days required between password changes
 	// i.e. the number of days left before the user is allowed to
 	// change his/her password.
 	Minimum *int
+
 	// The maximum number of days the password is valid (after that
 	// user is forced to change his/her password).
 	Maximum *int
+
 	// The number of days before password is to expire that user is
 	// warned.
 	Warn *int
+
 	// The number of days after password expires that account is
 	// disabled.
 	Inactive *int
+
 	// Days since Jan 1, 1970 that account is disabled i.e. an absolute
 	// date specifying when the login may no longer be used.
 	Expire *int
+
 	// Reserved for future use
 	Reserved *int
+}
+
+// Calculate how many days there are between now and 1970.
+func getNumberOfDaysFrom1970() int {
+	begining := time.Unix(0, 0)
+	diff := time.Since(begining)
+	days := math.Ceil(diff.Hours() / 24)
+	return int(days)
+}
+
+func NewShadow(shadow Shadow) Shadow {
+	if len(shadow.Name) == 0 {
+		panic("name is required")
+	}
+
+	if len(shadow.Password) == 0 {
+		shadow.Password = "!!"
+	}
+
+	if shadow.LastChanged == nil {
+		lastChanged := getNumberOfDaysFrom1970()
+		shadow.LastChanged = &lastChanged
+	}
+
+	return shadow
 }
 
 func (shadow Shadow) Marshal() (string, error) {
@@ -47,18 +80,14 @@ func (shadow Shadow) Marshal() (string, error) {
 
 	password := shadow.Password
 	if len(shadow.Password) == 0 {
-		password = "!!"
+		return "", errors.New(`password is required (ex: could be "!!")`)
 	}
 
 	var lastChanged string
-	if shadow.LastChanged != nil {
-		lastChanged = fmt.Sprint(*shadow.LastChanged)
+	if shadow.LastChanged == nil {
+		return "", errors.New(`lastChanged is required`)
 	} else {
-		// Calculate days between now and 1970
-		begining := time.Unix(0, 0)
-		diff := time.Since(begining)
-		days := math.Ceil(diff.Hours() / 24)
-		lastChanged = fmt.Sprint(days)
+		lastChanged = fmt.Sprint(*shadow.LastChanged)
 	}
 
 	minimum := ""
