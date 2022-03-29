@@ -3,8 +3,10 @@ package systemd
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"strings"
 	"text/template"
 
@@ -20,7 +22,7 @@ var templates embed.FS
 var initrdRootFsTargetRequiresPath string = "initrd-root-fs.target.requires"
 
 func createPaths(generatorDir string) error {
-	path := generatorDir + initrdRootFsTargetRequiresPath
+	path := path.Join(generatorDir, initrdRootFsTargetRequiresPath)
 	mode := fs.FileMode(0755)
 	if err := os.MkdirAll(path, mode); err != nil {
 		log.WithFields(log.Fields{
@@ -53,7 +55,7 @@ func writeSysrootTemplate(generatorDir string, templateFilename string, outputFi
 	}
 	log.Debug(content)
 
-	name := generatorDir + outputFilename
+	name := path.Join(generatorDir, outputFilename)
 	mode := fs.FileMode(0644)
 	if err := os.WriteFile(name, content.Bytes(), mode); err != nil {
 		log.WithFields(log.Fields{
@@ -64,8 +66,8 @@ func writeSysrootTemplate(generatorDir string, templateFilename string, outputFi
 		return err
 	}
 
-	oldname := ".." + outputFilename
-	newname := generatorDir + initrdRootFsTargetRequiresPath + outputFilename
+	oldname := path.Join("..", outputFilename)
+	newname := path.Join(generatorDir, initrdRootFsTargetRequiresPath, outputFilename)
 	if err := os.Symlink(oldname, newname); err != nil {
 		log.WithFields(log.Fields{
 			"oldname": oldname,
@@ -85,7 +87,7 @@ type systemdUnitMount struct {
 	Options string
 }
 
-func processSimpleK8sMount(generatorDir string, mounts []systemdUnitMount) error {
+func processSimpleK8sMount(mounts []systemdUnitMount) error {
 	if simpleK8s, err := yaml.GetYamlSimpleK8s(); err != nil {
 		return err
 	} else if simpleK8s != nil {
@@ -133,12 +135,27 @@ func processSimpleK8sMount(generatorDir string, mounts []systemdUnitMount) error
 
 func writeSystemdUnitMounts(generatorDir string, mounts []systemdUnitMount) error {
 	template := "templates/systemd.mount.go.tmpl"
-	log.WithField("initMounts", mounts).Debug()
+	log.WithField("initMounts", mounts).Debug("writeSystemdUnitMounts")
+
 	for _, mount := range mounts {
+		// Prepend `/sysroot` because chroot
+		if mount.What[0:1] == "/" { // Only applicable for path
+			mount.What = path.Join("/sysroot", mount.What)
+		}
+		if mount.Where[0:1] == "/" { // Only applicable for path
+			mount.Where = path.Join("/sysroot", mount.Where)
+		}
+
+		// Calculate systemd unit name
 		escapedFolder := unit.UnitNameEscape(mount.Where)
 		escapedFolder = strings.TrimLeft(escapedFolder, "-")
-		output := "/" + escapedFolder + ".mount"
-		log.WithField("output", output).Debug()
+		output := fmt.Sprintf("%s.mount", escapedFolder)
+
+		log.WithFields(log.Fields{
+			"mount":  mount,
+			"output": output,
+		}).Debug("writeSystemdUnitMounts")
+
 		if err := writeSysrootTemplate(generatorDir, template, output, mount); err != nil {
 			log.WithFields(log.Fields{
 				"generatorDir": generatorDir,
@@ -154,7 +171,7 @@ func writeSystemdUnitMounts(generatorDir string, mounts []systemdUnitMount) erro
 
 func writeSystemdUnitServiceInit(generatorDir string) error {
 	template := "templates/simplek8s-init.service"
-	output := "/simplek8s-init.service"
+	output := "simplek8s-init.service"
 	if err := writeSysrootTemplate(generatorDir, template, output, nil); err != nil {
 		log.WithFields(log.Fields{
 			"generatorDir": generatorDir,
@@ -172,27 +189,27 @@ func SystemdGenerator(generatorDir string) error {
 	log.Debug("init systemd generator")
 
 	mounts := []systemdUnitMount{
-		{[]string{}, "/sysroot", "tmpfs", "tmpfs", "size=90%"},
-		{[]string{"sysroot.mount"}, "/sysroot/var", "tmpfs", "tmpfs", "size=90%"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/etc", "/sysroot/var/etc", "none", "bind"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/home", "/sysroot/var/home", "none", "bind"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/mnt", "/sysroot/var/mnt", "none", "bind"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/opt", "/sysroot/var/opt", "none", "bind"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/root", "/sysroot/var/root", "none", "bind"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/usr/libexec", "/sysroot/var/usr/libexec", "none", "bind"},
-		{[]string{"sysroot-var.mount"}, "/sysroot/usr/local", "/sysroot/var/usr/local", "none", "bind"},
+		{[]string{}, "/", "tmpfs", "tmpfs", "size=90%"},
+		{[]string{"sysroot.mount"}, "/dev", "devtmpfs", "devtmpfs", "defaults"},
+		{[]string{"sysroot-dev.mount"}, "/var", "tmpfs", "tmpfs", "size=90%"},
+		{[]string{"sysroot-var.mount"}, "/etc", "/var/etc", "none", "bind"},
+		{[]string{"sysroot-var.mount"}, "/home", "/var/home", "none", "bind"},
+		{[]string{"sysroot-var.mount"}, "/mnt", "/var/mnt", "none", "bind"},
+		{[]string{"sysroot-var.mount"}, "/opt", "/var/opt", "none", "bind"},
+		{[]string{"sysroot-var.mount"}, "/root", "/var/root", "none", "bind"},
+		{[]string{"sysroot-var.mount"}, "/usr/libexec", "/var/usr/libexec", "none", "bind"},
+		{[]string{"sysroot-var.mount"}, "/usr/local", "/var/usr/local", "none", "bind"},
 	}
 
 	if err := common.IsDir(generatorDir); err != nil {
 		return err
 	}
-	generatorDir = strings.TrimRight(generatorDir, "/") + "/"
 
 	if err := createPaths(generatorDir); err != nil {
 		return err
 	}
 
-	if err := processSimpleK8sMount(generatorDir, mounts); err != nil {
+	if err := processSimpleK8sMount(mounts); err != nil {
 		return err
 	}
 
