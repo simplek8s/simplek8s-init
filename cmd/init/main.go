@@ -45,7 +45,7 @@ func getOperation(args []string) int {
 }
 
 func printUsage() {
-	fmt.Println(`SimpleK8s Firstboot
+	fmt.Println(`SimpleK8s Init
 This program do not support to be executed by the user.`)
 }
 

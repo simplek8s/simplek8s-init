@@ -152,9 +152,9 @@ func writeSystemdUnitMounts(generatorDir string, mounts []systemdUnitMount) erro
 	return nil
 }
 
-func writeSystemdUnitServiceFirstboot(generatorDir string) error {
-	template := "templates/simplek8s-firstboot.service"
-	output := "/simplek8s-firstboot.service"
+func writeSystemdUnitServiceInit(generatorDir string) error {
+	template := "templates/simplek8s-init.service"
+	output := "/simplek8s-init.service"
 	if err := writeSysrootTemplate(generatorDir, template, output, nil); err != nil {
 		log.WithFields(log.Fields{
 			"generatorDir": generatorDir,
@@ -200,7 +200,7 @@ func SystemdGenerator(generatorDir string) error {
 		return err
 	}
 
-	if err := writeSystemdUnitServiceFirstboot(generatorDir); err != nil {
+	if err := writeSystemdUnitServiceInit(generatorDir); err != nil {
 		return err
 	}
 

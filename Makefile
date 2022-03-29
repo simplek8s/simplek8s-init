@@ -1,7 +1,7 @@
 VERSION:=$(shell date --utc +%Y%m%d%H%M%S)
 BUILD_DIR=./build
-BINARY=simplek8s-firstboot
-PUBLISH_DEST=vbox1:/mnt/kubernetes/simplek8s-website-pvc-569e9642-8054-4213-a046-63af64297575/simplek8s-firstboot
+BINARY=simplek8s-init
+PUBLISH_DEST=vbox1:/mnt/kubernetes/simplek8s-website-pvc-569e9642-8054-4213-a046-63af64297575/simplek8s-init
 export
 
 build: build_amd64 build_arm64
@@ -11,7 +11,7 @@ build_amd64:
 		go build \
 			-ldflags='-extldflags=-static -w -s' \
 			-o "${BUILD_DIR}/${BINARY}.${VERSION}.amd64" \
-			cmd/firstboot/main.go
+			cmd/init/main.go
 	upx --no-progress --best --ultra-brute \
 		"${BUILD_DIR}/${BINARY}.${VERSION}.amd64"
 	ln -sf "${BINARY}.${VERSION}.amd64" "${BUILD_DIR}/${BINARY}.amd64"
@@ -21,7 +21,7 @@ build_arm64:
 		go build \
 			-ldflags='-extldflags=-static -w -s' \
 			-o "${BUILD_DIR}/${BINARY}.${VERSION}.arm64" \
-			cmd/firstboot/main.go
+			cmd/init/main.go
 	upx --no-progress --best --ultra-brute \
 		"${BUILD_DIR}/${BINARY}.${VERSION}.arm64"
 	ln -sf "${BINARY}.${VERSION}.arm64" "${BUILD_DIR}/${BINARY}.arm64"
