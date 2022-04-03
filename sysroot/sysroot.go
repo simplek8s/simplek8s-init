@@ -2,19 +2,28 @@ package sysroot
 
 import (
 	"bufio"
+	"embed"
 	"encoding/base64"
 	"fmt"
 	"io/fs"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	"github.com/jlsalvador/simplek8s/common"
 	"github.com/jlsalvador/simplek8s/linux/passwd"
 	"github.com/jlsalvador/simplek8s/sysroot/yaml"
 	log "github.com/sirupsen/logrus"
+	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
+
+//go:embed templates/*
+var templates embed.FS
 
 type Mount struct {
 	What    string
@@ -694,13 +703,72 @@ func newInstance(path string) (*Sysroot, error) {
 	return &result, nil
 }
 
-// Will write /etc files to configure sysroot
-func Configure(path string) error {
+func hashPassword(plainPassword string) string {
+	// Generate a random string for use in the salt
+	const charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	s := make([]byte, 8)
+	for i := range s {
+		s[i] = charset[seededRand.Intn(len(charset))]
+	}
+	salt := []byte(fmt.Sprintf("$6$%s", s))
+	// use salt to hash user-supplied password
+	c := sha512_crypt.New()
+	hash, err := c.Generate([]byte(plainPassword), salt)
+	if err != nil {
+		fmt.Printf("error hashing user's supplied password: %s\n", err)
+		os.Exit(1)
+	}
+
+	return string(hash)
+}
+
+//TODO: Cleanup this method
+func preconfigureLogin(sysroot *Sysroot) error {
+	// Random password
+	rootPlainPassword := gofakeit.Sentence(10)
+	rootEncryptedPassword := hashPassword(rootPlainPassword)
+
+	// Set the root password
+	rootShadow := passwd.NewShadow(passwd.Shadow{
+		Name:     "root",
+		Password: rootEncryptedPassword,
+	})
+	sysroot.Shadows = updateOrAppendShadow(sysroot.Shadows, rootShadow)
+
+	// Cleanup `/etc/issue` previous root password
+	var cleanedContent string
+	filename := filepath.Join(sysroot.Path, "/etc/issue")
+	if content, err := os.ReadFile(filename); err != nil {
+		return err
+	} else {
+		re := regexp.MustCompile(`^Root password:.*$`)
+		cleanedContent = re.ReplaceAllString(string(content), "")
+		if err := os.WriteFile(filename, []byte(cleanedContent), 0644); err != nil {
+			return err
+		}
+	}
+
+	// Write root password into `/etc/issue`
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	newLine := fmt.Sprintf("Root password: %s\n", rootPlainPassword)
+	if _, err = f.WriteString(newLine); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Will write `/etc` files to configure sysroot
+func Configure(path string, isLive bool) error {
 	log.Debug("init simplek8s.yaml parser")
 
-	var err error
 	var sysroot *Sysroot
-
+	var err error
 	if sysroot, err = newInstance(path); err != nil {
 		log.WithField("path", path).Error(err)
 		return err
@@ -715,7 +783,8 @@ func Configure(path string) error {
 	}
 
 	// Read the `simplek8s.yaml` file and configure `sysroot`
-	if simpleK8s, err := yaml.GetYamlSimpleK8s(); err != nil {
+	var simpleK8s *yaml.SimpleK8s
+	if simpleK8s, err = yaml.GetYamlSimpleK8s(); err != nil {
 		return err
 	} else if simpleK8s == nil {
 		log.WithField("path", path).Warn("can not find the simplek8s.yaml file")
@@ -723,6 +792,26 @@ func Configure(path string) error {
 		log.WithFields(log.Fields{
 			"simpleK8s": simpleK8s,
 			"sysroot":   sysroot,
+		}).Error(err)
+		return err
+	}
+
+	isPreconfiguredLogin := isLive && simpleK8s == nil
+	if isPreconfiguredLogin {
+		preconfigureLogin(sysroot)
+	}
+
+	// Write `/etc/ssh/sshd_config`
+	sshdFilename := filepath.Join(sysroot.Path, "/etc/ssh/sshd_config")
+	data := struct {
+		AllowRootPassword bool
+	}{
+		AllowRootPassword: isPreconfiguredLogin,
+	}
+	if err := common.WriteTemplate(sshdFilename, templates, "templates/sshd_config.tmpl", data); err != nil {
+		log.WithFields(log.Fields{
+			"filename": sshdFilename,
+			"data":     data,
 		}).Error(err)
 		return err
 	}

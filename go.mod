@@ -11,9 +11,11 @@ require (
 )
 
 require (
+	github.com/brianvoe/gofakeit/v6 v6.15.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pkg/xattr v0.4.6 // indirect
+	github.com/tredoe/osutil v1.0.6
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
 	gopkg.in/djherbis/times.v1 v1.3.0 // indirect

@@ -1,14 +1,13 @@
 package systemd
 
 import (
-	"bytes"
 	"embed"
 	"fmt"
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
-	"text/template"
 
 	unit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/jlsalvador/simplek8s/common"
@@ -31,51 +30,6 @@ func createPaths(generatorDir string) error {
 		}).Error(err)
 		return err
 	}
-	return nil
-}
-
-func writeSysrootTemplate(generatorDir string, templateFilename string, outputFilename string, data any) error {
-	tmpl, err := template.ParseFS(templates, templateFilename)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"templates": templates,
-			"tmpl":      tmpl,
-		}).Error(err)
-		return err
-	}
-	log.Debug(tmpl)
-
-	content := new(bytes.Buffer)
-	if err := tmpl.Execute(content, data); err != nil {
-		log.WithFields(log.Fields{
-			"tmpl": tmpl,
-			"data": data,
-		}).Error(err)
-		return err
-	}
-	log.Debug(content)
-
-	name := path.Join(generatorDir, outputFilename)
-	mode := fs.FileMode(0644)
-	if err := os.WriteFile(name, content.Bytes(), mode); err != nil {
-		log.WithFields(log.Fields{
-			"name":    name,
-			"content": content.String(),
-			"mode":    mode,
-		}).Error(err)
-		return err
-	}
-
-	oldname := path.Join("..", outputFilename)
-	newname := path.Join(generatorDir, initrdRootFsTargetRequiresPath, outputFilename)
-	if err := os.Symlink(oldname, newname); err != nil {
-		log.WithFields(log.Fields{
-			"oldname": oldname,
-			"newname": newname,
-		}).Error(err)
-		return err
-	}
-
 	return nil
 }
 
@@ -133,6 +87,28 @@ func processSimpleK8sMount(mounts []systemdUnitMount) error {
 	return nil
 }
 
+func writeTemplate(filename string, templates embed.FS, templateFilename string, data any) error {
+	if err := common.WriteTemplate(filename, templates, templateFilename, data); err != nil {
+		return err
+	}
+
+	basename := filepath.Base(filename)
+	dirname := filepath.Dir(filename)
+
+	// Create systemd link dependency
+	oldname := path.Join("..", basename)
+	newname := path.Join(dirname, initrdRootFsTargetRequiresPath, basename)
+	if err := os.Symlink(oldname, newname); err != nil {
+		log.WithFields(log.Fields{
+			"oldname": oldname,
+			"newname": newname,
+		}).Error(err)
+		return err
+	}
+
+	return nil
+}
+
 func writeSystemdUnitMounts(generatorDir string, mounts []systemdUnitMount) error {
 	template := "templates/systemd.mount.go.tmpl"
 	log.WithField("initMounts", mounts).Debug("writeSystemdUnitMounts")
@@ -156,7 +132,7 @@ func writeSystemdUnitMounts(generatorDir string, mounts []systemdUnitMount) erro
 			"output": output,
 		}).Debug("writeSystemdUnitMounts")
 
-		if err := writeSysrootTemplate(generatorDir, template, output, mount); err != nil {
+		if err := writeTemplate(filepath.Join(generatorDir, output), templates, template, mount); err != nil {
 			log.WithFields(log.Fields{
 				"generatorDir": generatorDir,
 				"template":     template,
@@ -169,10 +145,15 @@ func writeSystemdUnitMounts(generatorDir string, mounts []systemdUnitMount) erro
 	return nil
 }
 
-func writeSystemdUnitServiceInit(generatorDir string) error {
+func writeSystemdUnitServiceInit(generatorDir string, isLive bool) error {
 	template := "templates/simplek8s-init.service"
 	output := "simplek8s-init.service"
-	if err := writeSysrootTemplate(generatorDir, template, output, nil); err != nil {
+	data := struct {
+		IsLive bool
+	}{
+		IsLive: isLive,
+	}
+	if err := writeTemplate(filepath.Join(generatorDir, output), templates, template, data); err != nil {
 		log.WithFields(log.Fields{
 			"generatorDir": generatorDir,
 			"template":     template,
@@ -185,7 +166,7 @@ func writeSystemdUnitServiceInit(generatorDir string) error {
 
 // Will creates systemd units that will mount and populate sysroot
 // https://www.freedesktop.org/software/systemd/man/systemd.generator.html#Description
-func SystemdGenerator(generatorDir string) error {
+func SystemdGenerator(generatorDir string, earlyDir string, lateDir string) error {
 	log.Debug("init systemd generator")
 
 	mounts := []systemdUnitMount{
@@ -213,11 +194,21 @@ func SystemdGenerator(generatorDir string) error {
 		return err
 	}
 
+	isLive := false
+	for _, mount := range mounts {
+		if mount.Where == "/" {
+			if mount.What == "tmpfs" {
+				isLive = true
+			}
+			break
+		}
+	}
+
 	if err := writeSystemdUnitMounts(generatorDir, mounts); err != nil {
 		return err
 	}
 
-	if err := writeSystemdUnitServiceInit(generatorDir); err != nil {
+	if err := writeSystemdUnitServiceInit(generatorDir, isLive); err != nil {
 		return err
 	}
 

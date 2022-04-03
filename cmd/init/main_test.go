@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 )
 
@@ -26,48 +27,31 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
-func TestGetOperation(t *testing.T) {
-	tdd := []struct {
-		args []string
-		want int
-	}{
-		{
-			args: []string{
-				os.Args[0],
-				"posibleDirectory",
-				"posibleDirectory",
-				"posibleDirectory",
-			},
-			want: OPERATION_SYSTEMD,
-		},
-		{
-			args: []string{
-				os.Args[0],
-				"populate",
-				"posibleDirectory",
-			},
-			want: OPERATION_POPULATE,
-		},
-		{
-			args: []string{
-				os.Args[0],
-				"configurator",
-				"posibleDirectory",
-			},
-			want: OPERATION_CONFIGURATOR,
-		},
-		{
-			args: []string{
-				os.Args[0],
-			},
-			want: OPERATION_NONE,
-		},
-	}
-
-	for _, tc := range tdd {
-		got := getOperation(tc.args)
-		if got != tc.want {
-			t.Errorf("got %d, want %d", got, tc.want)
+func TestMain(t *testing.T) {
+	t.Run("no arguments", func(t *testing.T) {
+		if os.Getenv("BE_MAIN") == "1" {
+			main()
+			return
 		}
-	}
+
+		cmd := exec.Command(os.Args[0], "-test.run=TestMain")
+		cmd.Env = append(os.Environ(), "BE_MAIN=1")
+		err := cmd.Run()
+		if e, ok := err.(*exec.ExitError); ok && !e.Success() {
+			return
+		}
+
+		t.Fatalf("process ran with err %v, want exit status 1", err)
+	})
+
+	t.Run("debug true", func(t *testing.T) {
+		t.Setenv("DEBUG", "true")
+
+		main()
+	})
+	t.Run("debug false", func(t *testing.T) {
+		t.Setenv("DEBUG", "false")
+
+		main()
+	})
 }

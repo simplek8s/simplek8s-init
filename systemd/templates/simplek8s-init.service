@@ -14,6 +14,6 @@ DefaultDependencies=no
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=/usr/lib/systemd/system-generators/simplek8s-init populate /sysroot
-ExecStart=/usr/lib/systemd/system-generators/simplek8s-init configurator /sysroot
+ExecStartPre=/usr/lib/simplek8s/init populate --root /sysroot
+ExecStart=/usr/lib/simplek8s/init configure --root /sysroot{{if .IsLive}} --live{{end}}
 #ExecStartPost=/usr/bin/mount -o remount,ro /sysroot

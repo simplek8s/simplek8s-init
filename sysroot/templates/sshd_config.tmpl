@@ -1,0 +1,3 @@
+PasswordAuthentication {{if .AllowRootPassword}}yes{{else}}no{{end}}
+PermitRootLogin {{if .AllowRootPassword}}yes{{else}}prohibit-password{{end}}
+AllowUsers root

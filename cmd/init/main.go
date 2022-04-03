@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/jlsalvador/simplek8s/sysroot"
@@ -17,36 +19,24 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-const (
-	OPERATION_NONE int = iota
-	OPERATION_SYSTEMD
-	OPERATION_POPULATE
-	OPERATION_CONFIGURATOR
-)
+func isSubcommandSystemdGenerator(args []string) (isGenerator bool, normalDir string, earlyDir string, lateDir string) {
+	// [0] own cmd
+	// [1] normal dir
+	// [2] early dir
+	// [3] late dir
+	if len(args) != 4 {
+		return false, "", "", ""
+	}
 
-func getOperation(args []string) int {
+	fullPathFilename := args[0]
+	got := filepath.Base(fullPathFilename)
+	want := "simplek8s-generator"
 	log.WithFields(log.Fields{
 		"args": args,
-	}).Debug()
-
-	operation := OPERATION_NONE
-	switch len(args) {
-	case 4:
-		operation = OPERATION_SYSTEMD
-	case 3:
-		switch args[1] {
-		case "populate":
-			operation = OPERATION_POPULATE
-		case "configurator":
-			operation = OPERATION_CONFIGURATOR
-		}
-	}
-	return operation
-}
-
-func printUsage() {
-	fmt.Println(`SimpleK8s Init
-This program do not support to be executed by the user.`)
+		"got":  got,
+		"want": want,
+	}).Debug("isOperationSystemdGenerator")
+	return got == want, args[1], args[2], args[3]
 }
 
 func main() {
@@ -54,23 +44,40 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 		log.SetReportCaller(true)
 	}
+	defer log.Debug("done")
 
-	switch getOperation(os.Args) {
-	case OPERATION_SYSTEMD:
-		if err := systemd.SystemdGenerator(os.Args[1]); err != nil {
+	if isGenerator, normalDir, earlyDir, lateDir := isSubcommandSystemdGenerator(os.Args); isGenerator {
+		if err := systemd.SystemdGenerator(normalDir, earlyDir, lateDir); err != nil {
 			panic(err)
 		}
-	case OPERATION_POPULATE:
-		if err := sysroot.Populate(os.Args[2]); err != nil {
+		return
+	}
+
+	if len(os.Args) <= 1 {
+		fmt.Println("expected 'populate' or 'configure' subcommands")
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "populate":
+		cmdPopulate := flag.NewFlagSet("populate", flag.ExitOnError)
+		cmdPopulateRoot := cmdPopulate.String("root", "", "sysroot directory")
+
+		cmdPopulate.Parse(os.Args[2:])
+		if err := sysroot.Populate(*cmdPopulateRoot); err != nil {
 			panic(err)
 		}
-	case OPERATION_CONFIGURATOR:
-		if err := sysroot.Configure(os.Args[2]); err != nil {
+	case "configure":
+		cmdConfigure := flag.NewFlagSet("configure", flag.ExitOnError)
+		cmdConfigureRoot := cmdConfigure.String("root", "", "sysroot directory")
+		cmdConfigureLive := cmdConfigure.Bool("live", false, "preconfigure login")
+
+		cmdConfigure.Parse(os.Args[2:])
+		if err := sysroot.Configure(*cmdConfigureRoot, *cmdConfigureLive); err != nil {
 			panic(err)
 		}
 	default:
-		printUsage()
+		fmt.Printf("unknown subcommand %q, expected 'populate' or 'configure'\n", os.Args[1])
+		os.Exit(1)
 	}
-
-	log.Debug("done")
 }
