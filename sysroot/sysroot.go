@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -723,40 +722,26 @@ func hashPassword(plainPassword string) string {
 	return string(hash)
 }
 
-//TODO: Cleanup this method
-func preconfigureLogin(sysroot *Sysroot) error {
-	// Random password
-	rootPlainPassword := gofakeit.Sentence(10)
-	rootEncryptedPassword := hashPassword(rootPlainPassword)
+func generatePassword() (plain string, hashed string) {
+	plain = strings.TrimRight(gofakeit.Sentence(8), ".")
+	hashed = hashPassword(plain)
+	return
+}
+
+func configureNonPersistentSession(sysroot *Sysroot) error {
+	rootPlainPassword, rootHashedPassword := generatePassword()
 
 	// Set the root password
 	rootShadow := passwd.NewShadow(passwd.Shadow{
 		Name:     "root",
-		Password: rootEncryptedPassword,
+		Password: rootHashedPassword,
 	})
 	sysroot.Shadows = updateOrAppendShadow(sysroot.Shadows, rootShadow)
 
-	// Cleanup `/etc/issue` previous root password
-	var cleanedContent string
-	filename := filepath.Join(sysroot.Path, "/etc/issue")
-	if content, err := os.ReadFile(filename); err != nil {
-		return err
-	} else {
-		re := regexp.MustCompile(`^Root password:.*$`)
-		cleanedContent = re.ReplaceAllString(string(content), "")
-		if err := os.WriteFile(filename, []byte(cleanedContent), 0644); err != nil {
-			return err
-		}
-	}
-
-	// Write root password into `/etc/issue`
-	f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	newLine := fmt.Sprintf("Root password: %s\n", rootPlainPassword)
-	if _, err = f.WriteString(newLine); err != nil {
+	// Write root password into issue
+	fname := filepath.Join(sysroot.Path, "/etc/issue.d/80-live.issue")
+	data := fmt.Sprintf("\n\\e{blink}You are running a non persistent session!\\e{reset}\n  Root pwd: %s\n", rootPlainPassword)
+	if err := os.WriteFile(fname, []byte(data), 0644); err != nil {
 		return err
 	}
 
@@ -796,9 +781,9 @@ func Configure(path string, isLive bool) error {
 		return err
 	}
 
-	isPreconfiguredLogin := isLive && simpleK8s == nil
-	if isPreconfiguredLogin {
-		preconfigureLogin(sysroot)
+	isNonPersistentSession := isLive && simpleK8s == nil
+	if isNonPersistentSession {
+		configureNonPersistentSession(sysroot)
 	}
 
 	// Write `/etc/ssh/sshd_config`
@@ -806,7 +791,7 @@ func Configure(path string, isLive bool) error {
 	data := struct {
 		AllowRootPassword bool
 	}{
-		AllowRootPassword: isPreconfiguredLogin,
+		AllowRootPassword: isNonPersistentSession,
 	}
 	if err := common.WriteTemplate(sshdFilename, templates, "templates/sshd_config.tmpl", data); err != nil {
 		log.WithFields(log.Fields{
