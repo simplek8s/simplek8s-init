@@ -3,8 +3,8 @@ package yaml
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
@@ -106,66 +106,66 @@ func getYamlContent() ([]byte, error) {
 		}
 		ps := pt.GetPartitions()
 
-		for i := 0; i <= len(ps); i++ {
-			log.WithField("partitionIndex", i).Debug()
+		for partitionIndex := 0; partitionIndex <= len(ps); partitionIndex++ {
+			log.WithField("partitionIndex", partitionIndex).Debug()
 
-			fs, err := disk.GetFilesystem(i)
+			fs, err := disk.GetFilesystem(partitionIndex)
 			if err != nil {
 				log.Debug("fs err", err)
 				continue
 			}
-			label := fs.Label()
-			log.WithField("label", label).Debug()
 
 			if fs.Type() != filesystem.TypeFat32 {
-				log.WithField("label", label).Debug("skipping")
+				log.WithField("partitionIndex", partitionIndex).Debug("skipping")
 				continue
 			}
 
-			path := "/"
+			// Search yaml first into `/`, then `/simplek8s/`
+			for _, path := range []string{"/", "/simplek8s/"} {
 
-			fis, err := fs.ReadDir(path)
-			if err != nil {
-				log.WithField("readDirErr", err).Warn()
-				continue
-			}
-
-			for _, fi := range fis {
-				filename := fi.Name()
-				fullFilename := strings.TrimRight(path, "/") + "/" + filename
-				isDir := fi.IsDir()
-				rMath := rSimpleK8sYaml.MatchString(filename)
-				log.WithFields(log.Fields{
-					"fullFilename": fullFilename,
-					"isDir":        isDir,
-					"rMath":        rMath,
-				}).Debug()
-
-				if isDir || !rMath {
-					log.WithField("fullFilename", fullFilename).Debug("skipping")
-					continue
-				}
-
-				log.WithFields(log.Fields{
-					"blockDevice":  blockDevice,
-					"label":        label,
-					"fullFilename": fullFilename,
-				}).Info("simplek8s yaml found")
-
-				file, err := fs.OpenFile(fullFilename, os.O_RDONLY)
+				fis, err := fs.ReadDir(path)
 				if err != nil {
-					log.WithField("openFileErr", err).Warn()
+					log.WithField("readDirErr", err).Warn()
 					continue
 				}
-				defer file.Close()
 
-				b, err := ioutil.ReadAll(file)
-				if err != nil {
-					log.WithField("readAllErr", err).Warn()
-					continue
+				for _, fi := range fis {
+					filename := fi.Name()
+					fullFilename := filepath.Join(path, filename)
+					isDir := fi.IsDir()
+					rMath := rSimpleK8sYaml.MatchString(filename)
+					log.WithFields(log.Fields{
+						"fullFilename": fullFilename,
+						"isDir":        isDir,
+						"rMath":        rMath,
+					}).Debug()
+
+					if isDir || !rMath {
+						log.WithField("fullFilename", fullFilename).Debug("skipping")
+						continue
+					}
+
+					log.WithFields(log.Fields{
+						"blockDevice":    blockDevice,
+						"partitionIndex": partitionIndex,
+						"fullFilename":   fullFilename,
+					}).Info("simplek8s yaml found")
+
+					file, err := fs.OpenFile(fullFilename, os.O_RDONLY)
+					if err != nil {
+						log.WithField("openFileErr", err).Warn()
+						continue
+					}
+					defer file.Close()
+
+					b, err := ioutil.ReadAll(file)
+					if err != nil {
+						log.WithField("readAllErr", err).Warn()
+						continue
+					}
+					log.WithField("readAll", string(b)).Debug()
+					return b, nil
 				}
-				log.WithField("readAll", string(b)).Debug()
-				return b, nil
 			}
 		}
 	}
