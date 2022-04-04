@@ -19,6 +19,9 @@ var SUBCOMMANDS = []string{
 }
 
 func IsSubcmd(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
 	return common.IsStringInList(args[1], SUBCOMMANDS)
 }
 
