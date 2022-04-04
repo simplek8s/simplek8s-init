@@ -2,12 +2,31 @@ package common
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
-/*
- * unused
- *
+func TestGetEnv(t *testing.T) {
+	var got string
+	var want string
+
+	// Fallback
+	os.Unsetenv("TESTING")
+	got = GetEnv("TESTING", "empty")
+	want = "empty"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	// Value
+	os.Setenv("TESTING", "something")
+	got = GetEnv("TESTING", "anotherthing")
+	want = "something"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestIsStringInList(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -56,7 +75,6 @@ func TestIsStringInList(t *testing.T) {
 		})
 	}
 }
-*/
 
 func TestIsDir(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -101,4 +119,45 @@ func TestIsDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWriteTemplate(t *testing.T) {
+	// logrus.SetOutput(ioutil.Discard)
+	tmpDir := t.TempDir()
+
+	// Write OK template
+	fnOk := "ok.tmpl"
+	tOk := []byte("Template example\n{{ .Text }}\nAnother line\n")
+	if err := os.WriteFile(filepath.Join(tmpDir, fnOk), tOk, 0644); err != nil {
+		t.Error(err)
+	}
+
+	// Write bad template
+	fnBadTmpl := "bad.tmpl"
+	tBadTmpl := []byte("This is a {{ bad template {{")
+	if err := os.WriteFile(filepath.Join(tmpDir, fnBadTmpl), tBadTmpl, 0644); err != nil {
+		t.Error(err)
+	}
+
+	fs := os.DirFS(tmpDir)
+	data := struct {
+		Text string
+	}{"this is a test"}
+
+	t.Run("ok", func(t *testing.T) {
+		if err := WriteTemplate(filepath.Join(tmpDir, "ok.txt"), fs, fnOk, data); err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("bad template", func(t *testing.T) {
+		if err := WriteTemplate(filepath.Join(tmpDir, "badTemplate.txt"), fs, fnBadTmpl, data); err == nil {
+			t.Error("expected bad template error")
+		}
+	})
+	//TODO
+	// t.Run("bad render", func(t *testing.T) {
+	// 	if err := WriteTemplate(filepath.Join(tmpDir, "badRender.txt"), fs, fnOk, nil); err == nil {
+	// 		t.Error("expected bad template render")
+	// 	}
+	// })
 }

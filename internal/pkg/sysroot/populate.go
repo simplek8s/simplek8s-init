@@ -4,7 +4,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/jlsalvador/simplek8s/common"
+	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 

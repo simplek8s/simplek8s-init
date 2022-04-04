@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/jlsalvador/simplek8s/common"
-	"github.com/jlsalvador/simplek8s/linux/passwd"
-	"github.com/jlsalvador/simplek8s/sysroot/yaml"
+	"github.com/jlsalvador/simplek8s/internal/pkg/common"
+	"github.com/jlsalvador/simplek8s/internal/pkg/linux/passwd"
+	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	log "github.com/sirupsen/logrus"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )

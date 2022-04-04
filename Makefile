@@ -1,15 +1,16 @@
 VERSION:=$(shell date --utc +%Y%m%d%H%M%S)
+export VERSION
 BUILD_DIR=./build
 BINARY=simplek8s-init
 PUBLISH_DEST=vbox1:/mnt/kubernetes/simplek8s-website-pvc-569e9642-8054-4213-a046-63af64297575/simplek8s-init
-export
+LDFLAGS=-X main.Version=${VERSION} -extldflags=-static -w -s
 
 build: build_amd64 build_arm64
 
 build_amd64:
 	GOOS=linux GOARCH=amd64 \
 		go build \
-			-ldflags='-extldflags=-static -w -s' \
+			-ldflags="${LDFLAGS}" \
 			-o "${BUILD_DIR}/${BINARY}.${VERSION}.amd64" \
 			cmd/init/main.go
 	upx --no-progress --best --ultra-brute \
@@ -19,7 +20,7 @@ build_amd64:
 build_arm64:
 	GOOS=linux GOARCH=arm64 \
 		go build \
-			-ldflags='-extldflags=-static -w -s' \
+			-ldflags="${LDFLAGS}" \
 			-o "${BUILD_DIR}/${BINARY}.${VERSION}.arm64" \
 			cmd/init/main.go
 	upx --no-progress --best --ultra-brute \

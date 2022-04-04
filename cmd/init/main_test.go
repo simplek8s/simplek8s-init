@@ -6,27 +6,6 @@ import (
 	"testing"
 )
 
-func TestGetEnv(t *testing.T) {
-	var got string
-	var want string
-
-	// Fallback
-	os.Unsetenv("TESTING")
-	got = getEnv("TESTING", "empty")
-	want = "empty"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-
-	// Value
-	os.Setenv("TESTING", "something")
-	got = getEnv("TESTING", "anotherthing")
-	want = "something"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 func TestMain(t *testing.T) {
 	t.Run("no arguments", func(t *testing.T) {
 		if os.Getenv("BE_MAIN") == "1" {

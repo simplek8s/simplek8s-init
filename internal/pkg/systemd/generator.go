@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	unit "github.com/coreos/go-systemd/v22/unit"
-	"github.com/jlsalvador/simplek8s/common"
-	"github.com/jlsalvador/simplek8s/sysroot/yaml"
+	"github.com/jlsalvador/simplek8s/internal/pkg/common"
+	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	log "github.com/sirupsen/logrus"
 )
 

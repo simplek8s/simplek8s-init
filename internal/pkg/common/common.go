@@ -11,9 +11,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-/*
- * unused
- *
+func GetEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
 func IsStringInList(value string, list []string) bool {
 	for _, v := range list {
 		if value == v {
@@ -22,7 +26,6 @@ func IsStringInList(value string, list []string) bool {
 	}
 	return false
 }
-*/
 
 func IsDir(path string) error {
 	if len(path) == 0 {
