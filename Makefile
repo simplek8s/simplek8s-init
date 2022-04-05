@@ -13,9 +13,6 @@ build_amd64:
 			-ldflags="${LDFLAGS}" \
 			-o "${BUILD_DIR}/${BINARY}.${VERSION}.amd64" \
 			cmd/init/main.go
-	upx --no-progress --best --ultra-brute \
-		"${BUILD_DIR}/${BINARY}.${VERSION}.amd64"
-	ln -sf "${BINARY}.${VERSION}.amd64" "${BUILD_DIR}/${BINARY}.amd64"
 
 build_arm64:
 	GOOS=linux GOARCH=arm64 \
@@ -23,17 +20,24 @@ build_arm64:
 			-ldflags="${LDFLAGS}" \
 			-o "${BUILD_DIR}/${BINARY}.${VERSION}.arm64" \
 			cmd/init/main.go
+
+build_arm64_prod: build_arm64
 	upx --no-progress --best --ultra-brute \
 		"${BUILD_DIR}/${BINARY}.${VERSION}.arm64"
 	ln -sf "${BINARY}.${VERSION}.arm64" "${BUILD_DIR}/${BINARY}.arm64"
 
-publish_amd64: build_amd64
+build_amd64_prod: build_amd64
+	upx --no-progress --best --ultra-brute \
+		"${BUILD_DIR}/${BINARY}.${VERSION}.amd64"
+	ln -sf "${BINARY}.${VERSION}.amd64" "${BUILD_DIR}/${BINARY}.amd64"
+
+publish_amd64: build_amd64_prod
 	rsync --links \
 		"${BUILD_DIR}/${BINARY}.amd64" \
 		"${BUILD_DIR}/${BINARY}.${VERSION}.amd64" \
 		"${PUBLISH_DEST}/"
 
-publish_arm64: build_arm64
+publish_arm64: build_arm64_prod
 	rsync --links \
 		"${BUILD_DIR}/${BINARY}.arm64" \
 		"${BUILD_DIR}/${BINARY}.${VERSION}.arm64" \
