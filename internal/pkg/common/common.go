@@ -42,7 +42,7 @@ func IsDir(path string) error {
 	return nil
 }
 
-func WriteTemplate(filename string, templates fs.FS, templateFilename string, data any) error {
+func RenderTemplate(templates fs.FS, templateFilename string, data any) (string, error) {
 	// Parse template
 	tmpl, err := template.ParseFS(templates, templateFilename)
 	if err != nil {
@@ -50,7 +50,7 @@ func WriteTemplate(filename string, templates fs.FS, templateFilename string, da
 			"templates": templates,
 			"tmpl":      tmpl,
 		}).Error(err)
-		return err
+		return "", err
 	}
 	log.Debug(tmpl)
 
@@ -61,9 +61,25 @@ func WriteTemplate(filename string, templates fs.FS, templateFilename string, da
 			"tmpl": tmpl,
 			"data": data,
 		}).Error(err)
-		return err
+		return "", err
 	}
 	log.Debug(content)
+
+	return content.String(), nil
+}
+
+func WriteTemplate(filename string, templates fs.FS, templateFilename string, data any) error {
+	var content string
+	var err error
+
+	// Render template into `content` var
+	if content, err = RenderTemplate(
+		templates,
+		templateFilename,
+		data,
+	); err != nil {
+		return err
+	}
 
 	// Create destination directory
 	dirname := filepath.Dir(filename)
@@ -75,12 +91,12 @@ func WriteTemplate(filename string, templates fs.FS, templateFilename string, da
 		return err
 	}
 
-	// Write file
+	// Write file with `content` var
 	mode := fs.FileMode(0644)
-	if err := os.WriteFile(filename, content.Bytes(), mode); err != nil {
+	if err := os.WriteFile(filename, []byte(content), mode); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
-			"content":  content.String(),
+			"content":  content,
 			"mode":     mode,
 		}).Error(err)
 		return err

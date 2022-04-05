@@ -20,21 +20,16 @@ var CMDALIAS = []string{
 }
 
 func IsCmdAlias(args []string) bool {
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return false
 	}
-	return common.IsStringInList(args[1], CMDALIAS)
+
+	fullPathFilename := args[0]
+	got := filepath.Base(fullPathFilename)
+	return common.IsStringInList(got, CMDALIAS)
 }
 
 func isCmdAliasSystemdGenerator(args []string) bool {
-	// Validate cmdname at args[0]
-	fullPathFilename := args[0]
-	got := filepath.Base(fullPathFilename)
-	want := CMDALIAS_GENERATOR
-	if got != want {
-		return false
-	}
-
 	// Validate args[1:]
 	// [0] own cmd
 	// [1] normal dir
@@ -44,18 +39,32 @@ func isCmdAliasSystemdGenerator(args []string) bool {
 		return false
 	}
 
+	// Validate cmdname at args[0]
+	fullPathFilename := args[0]
+	got := filepath.Base(fullPathFilename)
+	want := CMDALIAS_GENERATOR
+	if got != want {
+		return false
+	}
+
 	//TODO: Validate directories
 
 	return true
 }
 
 func isCmdAliasUpdateCtl(args []string) bool {
+	// [0] own cmd
+	if len(args) < 1 {
+		return false
+	}
+
 	fullPathFilename := args[0]
 	got := filepath.Base(fullPathFilename)
 	want := CMDALIAS_UPDATECTL
 	if got != want {
 		return false
 	}
+
 	return true
 }
 
