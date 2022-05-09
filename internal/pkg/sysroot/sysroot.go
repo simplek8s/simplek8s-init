@@ -619,13 +619,7 @@ func writeFiles(sysroot Sysroot) error {
 			}
 		}
 
-		if err := os.WriteFile(filename, file.Content, file.Mode); err != nil {
-			return err
-		}
-		if err := os.Chmod(filename, file.Mode); err != nil {
-			return err
-		}
-		if err := os.Chown(filename, file.Uid, file.Gid); err != nil {
+		if err := writeFile(filename, file.Content, file.Mode, file.Uid, file.Gid); err != nil {
 			return err
 		}
 	}
