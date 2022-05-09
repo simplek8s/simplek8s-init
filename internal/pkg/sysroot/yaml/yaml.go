@@ -13,50 +13,57 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type simpleK8sGroups struct {
+	Gid    *int   `yaml:"gid,omitempty"`
+	Name   string `yaml:"name"`
+	System *bool  `yaml:"system,omitempty"`
+}
+type simpleK8sUsers struct {
+	Uid               *int     `yaml:"uid,omitempty"`
+	Gid               *int     `yaml:"gid,omitempty"`
+	Name              string   `yaml:"name,omitempty"`
+	PasswordHash      *string  `yaml:"passwordHash,omitempty"`
+	SshAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"`
+	Groups            []string `yaml:"groups,omitempty"`
+	System            *bool    `yaml:"system,omitempty"`
+}
+type simpleK8sMounts struct {
+	What    string  `yaml:"what,omitempty"`
+	Where   string  `yaml:"where,omitempty"`
+	Type    *string `yaml:"type,omitempty"`
+	Options *string `yaml:"options,omitempty"`
+}
+type simpleK8sLinks struct {
+	Overwrite *bool   `yaml:"overwrite,omitempty"`
+	Path      string  `yaml:"path,omitempty"`
+	Target    string  `yaml:"target,omitempty"`
+	Owner     *string `yaml:"owner,omitempty"`
+	Hard      *bool   `yaml:"hard,omitempty"`
+}
+type simpleK8sDirectories struct {
+	Overwrite   *bool   `yaml:"overwrite,omitempty"`
+	Path        string  `yaml:"path,omitempty"`
+	Owner       *string `yaml:"owner,omitempty"`
+	Permissions *string `yaml:"permissions,omitempty"`
+}
+type simpleK8sFiles struct {
+	Overwrite   *bool   `yaml:"overwrite,omitempty"`
+	Path        string  `yaml:"path,omitempty"`
+	Encoding    *string `yaml:"encoding,omitempty"`
+	Content     *string `yaml:"content,omitempty"`
+	Owner       *string `yaml:"owner,omitempty"`
+	Permissions *string `yaml:"permissions,omitempty"`
+}
+type simpleK8sStorage struct {
+	Mounts      []simpleK8sMounts      `yaml:"mounts,omitempty"`
+	Links       []simpleK8sLinks       `yaml:"links,omitempty"`
+	Directories []simpleK8sDirectories `yaml:"directories,omitempty"`
+	Files       []simpleK8sFiles       `yaml:"files,omitempty"`
+}
 type SimpleK8s struct {
-	Groups []struct {
-		Gid    *int   `yaml:"gid,omitempty"`
-		Name   string `yaml:"name"`
-		System *bool  `yaml:"system,omitempty"`
-	} `yaml:"groups,omitempty"`
-	Users []struct {
-		Uid               *int     `yaml:"uid,omitempty"`
-		Gid               *int     `yaml:"gid,omitempty"`
-		Name              string   `yaml:"name,omitempty"`
-		PasswordHash      *string  `yaml:"passwordHash,omitempty"`
-		SshAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"`
-		Groups            []string `yaml:"groups,omitempty"`
-		System            *bool    `yaml:"system,omitempty"`
-	} `yaml:"users,omitempty"`
-	Storage struct {
-		Mounts []struct {
-			What    string  `yaml:"what,omitempty"`
-			Where   string  `yaml:"where,omitempty"`
-			Type    *string `yaml:"type,omitempty"`
-			Options *string `yaml:"options,omitempty"`
-		} `yaml:"mounts,omitempty"`
-		Links []struct {
-			Overwrite *bool   `yaml:"overwrite,omitempty"`
-			Path      string  `yaml:"path,omitempty"`
-			Target    string  `yaml:"target,omitempty"`
-			Owner     *string `yaml:"owner,omitempty"`
-			Hard      *bool   `yaml:"hard,omitempty"`
-		} `yaml:"links,omitempty"`
-		Directories []struct {
-			Overwrite   *bool   `yaml:"overwrite,omitempty"`
-			Path        string  `yaml:"path,omitempty"`
-			Owner       *string `yaml:"owner,omitempty"`
-			Permissions *string `yaml:"permissions,omitempty"`
-		} `yaml:"directories,omitempty"`
-		Files []struct {
-			Overwrite   *bool   `yaml:"overwrite,omitempty"`
-			Path        string  `yaml:"path,omitempty"`
-			Encoding    *string `yaml:"encoding,omitempty"`
-			Content     *string `yaml:"content,omitempty"`
-			Owner       *string `yaml:"owner,omitempty"`
-			Permissions *string `yaml:"permissions,omitempty"`
-		} `yaml:"files,omitempty"`
-	} `yaml:"storage,omitempty"`
+	Groups  []simpleK8sGroups `yaml:"groups,omitempty"`
+	Users   []simpleK8sUsers  `yaml:"users,omitempty"`
+	Storage simpleK8sStorage  `yaml:"storage,omitempty"`
 }
 
 func getDevices() ([]string, error) {
@@ -172,6 +179,17 @@ func getYamlContent() ([]byte, error) {
 	return nil, nil
 }
 
+func unmarshal(yamlContent []byte) (*SimpleK8s, error) {
+	simpleK8s := new(SimpleK8s)
+	if err := yaml.Unmarshal(yamlContent, &simpleK8s); err != nil {
+		log.WithFields(log.Fields{
+			"content": string(yamlContent),
+		}).Warn(err)
+		return nil, err
+	}
+	return simpleK8s, nil
+}
+
 // Search across all FAT32 partitions the `simplek8s.yaml` file and
 // returns it as a `SimpleK8s` type struct.
 func GetYamlSimpleK8s() (*SimpleK8s, error) {
@@ -192,11 +210,8 @@ func GetYamlSimpleK8s() (*SimpleK8s, error) {
 	}
 
 	// Unmarshal the yaml content
-	simpleK8s := new(SimpleK8s)
-	if err := yaml.Unmarshal(b, &simpleK8s); err != nil {
-		log.WithFields(log.Fields{
-			"content": string(b),
-		}).Warn(err)
+	simpleK8s, err := unmarshal(b)
+	if err != nil {
 		return nil, err
 	}
 
