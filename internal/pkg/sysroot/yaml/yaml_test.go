@@ -23,7 +23,7 @@ func Test_unmarshal(t *testing.T) {
 				yamlContent: []byte(`
 storage:
   files:
-    - path: /etc/systemd/network/50-en-static.conf
+    - path: /etc/systemd/network/50-en-static.network
       content: |
         [Match]
         Name=en*
@@ -35,10 +35,11 @@ storage:
 `),
 			},
 			want: &SimpleK8s{
-				Storage: simpleK8sStorage{
+				Version: VERSION_1,
+				Storage: &simpleK8sStorage{
 					Files: []simpleK8sFiles{
 						{
-							Path: "/etc/systemd/networkd/50-en-static.conf",
+							Path: "/etc/systemd/networkd/50-en-static.network",
 							Content: pointy.String(`[Match]
 Name=en*
 

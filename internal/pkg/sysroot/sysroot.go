@@ -331,99 +331,105 @@ func getBoolByDefault(pointer *bool, fallback bool) bool {
 }
 
 func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
-	for _, link := range simpleK8s.Storage.Links {
-		uid := 0
-		gid := 0
-		if link.Owner != nil {
-			uid, gid = getUidGidFromString(*link.Owner, sysroot.Groups, sysroot.Users)
+	if simpleK8s.Storage != nil {
+		for _, link := range simpleK8s.Storage.Links {
+			uid := 0
+			gid := 0
+			if link.Owner != nil {
+				uid, gid = getUidGidFromString(*link.Owner, sysroot.Groups, sysroot.Users)
+			}
+
+			isOverwrite := getBoolByDefault(link.Overwrite, true)
+			isHard := getBoolByDefault(link.Hard, false)
+
+			sysroot.Links = append(sysroot.Links, Link{
+				Overwrite: isOverwrite,
+				Path:      link.Path,
+				Target:    link.Target,
+				Uid:       uid,
+				Gid:       gid,
+				Hard:      isHard,
+			})
 		}
-
-		isOverwrite := getBoolByDefault(link.Overwrite, true)
-		isHard := getBoolByDefault(link.Hard, false)
-
-		sysroot.Links = append(sysroot.Links, Link{
-			Overwrite: isOverwrite,
-			Path:      link.Path,
-			Target:    link.Target,
-			Uid:       uid,
-			Gid:       gid,
-			Hard:      isHard,
-		})
 	}
 	return nil
 }
 
 func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
-	for _, directory := range simpleK8s.Storage.Directories {
-		isOverwrite := getBoolByDefault(directory.Overwrite, true)
+	if simpleK8s.Storage != nil {
+		for _, directory := range simpleK8s.Storage.Directories {
+			isOverwrite := getBoolByDefault(directory.Overwrite, true)
 
-		uid := 0
-		gid := 0
-		if directory.Owner != nil {
-			uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
-		}
-
-		var mode fs.FileMode = 0775
-		if directory.Permissions != nil {
-			if valueAsInt, err := strconv.Atoi(*directory.Permissions); err != nil {
-				return err
-			} else {
-				mode = fs.FileMode(valueAsInt)
+			uid := 0
+			gid := 0
+			if directory.Owner != nil {
+				uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
 			}
-		}
 
-		sysroot.Directories = append(sysroot.Directories, Directory{
-			Overwrite: isOverwrite,
-			Path:      directory.Path,
-			Mode:      mode,
-			Uid:       uid,
-			Gid:       gid,
-		})
+			var mode fs.FileMode = 0775
+			if directory.Permissions != nil {
+				if valueAsInt, err := strconv.Atoi(*directory.Permissions); err != nil {
+					return err
+				} else {
+					mode = fs.FileMode(valueAsInt)
+				}
+			}
+
+			sysroot.Directories = append(sysroot.Directories, Directory{
+				Overwrite: isOverwrite,
+				Path:      directory.Path,
+				Mode:      mode,
+				Uid:       uid,
+				Gid:       gid,
+			})
+		}
 	}
 	return nil
 }
 
 func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
-	for _, file := range simpleK8s.Storage.Files {
-		filename := file.Path
-		isOverwrite := getBoolByDefault(file.Overwrite, true)
+	if simpleK8s.Storage != nil {
+		for _, file := range simpleK8s.Storage.Files {
+			filename := file.Path
+			isOverwrite := getBoolByDefault(file.Overwrite, true)
 
-		uid := 0
-		gid := 0
-		if file.Permissions != nil {
-			uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
-		}
-
-		var mode fs.FileMode = 0644
-		if file.Permissions != nil {
-			if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
-				return err
-			} else {
-				mode = fs.FileMode(valueAsInt)
+			uid := 0
+			gid := 0
+			if file.Permissions != nil {
+				uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
 			}
-		}
 
-		content := []byte{}
-		if file.Content != nil {
-			if file.Encoding != nil && *file.Encoding == "b64" {
-				var err error
-				content, err = base64.StdEncoding.DecodeString(*file.Content)
-				if err != nil {
+			var mode fs.FileMode = 0644
+			if file.Permissions != nil {
+				if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
 					return err
+				} else {
+					mode = fs.FileMode(valueAsInt)
 				}
-			} else {
-				content = []byte(*file.Content)
 			}
-		}
 
-		sysroot.Files = append(sysroot.Files, File{
-			Overwrite: isOverwrite,
-			Filename:  filename,
-			Content:   content,
-			Mode:      mode,
-			Uid:       uid,
-			Gid:       gid,
-		})
+			content := []byte{}
+			if file.Content != nil {
+				if file.Encoding != nil && *file.Encoding == "b64" {
+					var err error
+					content, err = base64.StdEncoding.DecodeString(*file.Content)
+					if err != nil {
+						return err
+					}
+				} else {
+					content = []byte(*file.Content)
+				}
+			}
+
+			sysroot.Files = append(sysroot.Files, File{
+				Overwrite: isOverwrite,
+				Filename:  filename,
+				Content:   content,
+				Mode:      mode,
+				Uid:       uid,
+				Gid:       gid,
+			})
+		}
 	}
 	return nil
 }

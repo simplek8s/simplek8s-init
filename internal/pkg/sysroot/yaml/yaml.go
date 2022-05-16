@@ -1,6 +1,7 @@
 package yaml
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,6 +12,10 @@ import (
 	"github.com/jlsalvador/simplek8s/internal/pkg/linux/procfs"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	VERSION_1 = "1"
 )
 
 type simpleK8sGroups struct {
@@ -61,9 +66,10 @@ type simpleK8sStorage struct {
 	Files       []simpleK8sFiles       `yaml:"files,omitempty"`
 }
 type SimpleK8s struct {
+	Version string            `yaml:"version"`
 	Groups  []simpleK8sGroups `yaml:"groups,omitempty"`
 	Users   []simpleK8sUsers  `yaml:"users,omitempty"`
-	Storage simpleK8sStorage  `yaml:"storage,omitempty"`
+	Storage *simpleK8sStorage `yaml:"storage,omitempty"`
 }
 
 func getDevices() ([]string, error) {
@@ -83,7 +89,7 @@ func getDevices() ([]string, error) {
 }
 
 // Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
-func getYamlContent() ([]byte, error) {
+func getYamlContent(directories []string) ([]byte, error) {
 	blockDevices, err := getDevices()
 	log.WithField("devices", blockDevices).Debug()
 	if err != nil {
@@ -127,8 +133,8 @@ func getYamlContent() ([]byte, error) {
 				continue
 			}
 
-			// Search yaml first into `/`, then `/simplek8s/`
-			for _, path := range []string{"/", "/simplek8s/"} {
+			// Search first simplek8s.yaml file
+			for _, path := range directories {
 
 				fis, err := fs.ReadDir(path)
 				if err != nil {
@@ -170,7 +176,11 @@ func getYamlContent() ([]byte, error) {
 						log.WithField("readAllErr", err).Warn()
 						continue
 					}
+
+					// Trim NUL chars
+					b = bytes.Trim(b, "\x00")
 					log.WithField("readAll", string(b)).Debug()
+
 					return b, nil
 				}
 			}
@@ -193,9 +203,19 @@ func unmarshal(yamlContent []byte) (*SimpleK8s, error) {
 // Search across all FAT32 partitions the `simplek8s.yaml` file and
 // returns it as a `SimpleK8s` type struct.
 func GetYamlSimpleK8s() (*SimpleK8s, error) {
+	var directories = []string{
+		"/",
+		"/simplek8s/",
+		"/EFI/",
+		"/EFI/simplek8s/",
+		"/boot/",
+		"/boot/simplek8s/",
+		"/boot/EFI/",
+		"/boot/EFI/simplek8s/",
+	}
 
 	// Search for `simplek8s.yaml` content across all FAT32 partitions
-	b, err := getYamlContent()
+	b, err := getYamlContent(directories)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"content": string(b),

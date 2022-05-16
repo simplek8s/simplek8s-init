@@ -44,7 +44,7 @@ type systemdUnitMount struct {
 func processSimpleK8sMount(mounts []systemdUnitMount) error {
 	if simpleK8s, err := yaml.GetYamlSimpleK8s(); err != nil {
 		return err
-	} else if simpleK8s != nil {
+	} else if simpleK8s != nil && simpleK8s.Storage != nil {
 		for _, sk8sMount := range simpleK8s.Storage.Mounts {
 			found := false
 			for index, mount := range mounts {
