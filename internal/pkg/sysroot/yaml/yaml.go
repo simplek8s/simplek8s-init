@@ -89,12 +89,16 @@ func getDevices() ([]string, error) {
 }
 
 // Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
-func getYamlContent(directories []string) ([]byte, error) {
-	blockDevices, err := getDevices()
-	log.WithField("devices", blockDevices).Debug()
-	if err != nil {
-		log.WithField("getYamlContent", err).Warn()
-		return nil, err
+func getYamlContent(blockDevices []string) ([]byte, error) {
+	var directories = []string{
+		"/",
+		"/simplek8s/",
+		"/EFI/",
+		"/EFI/simplek8s/",
+		"/boot/",
+		"/boot/simplek8s/",
+		"/boot/EFI/",
+		"/boot/EFI/simplek8s/",
 	}
 
 	rSimpleK8sYaml, err := regexp.Compile("^simplek8s.ya?ml$")
@@ -138,7 +142,7 @@ func getYamlContent(directories []string) ([]byte, error) {
 
 				fis, err := fs.ReadDir(path)
 				if err != nil {
-					log.WithField("readDirErr", err).Warn()
+					log.WithField("readDirErr", err).Debug("skipping directory", path)
 					continue
 				}
 
@@ -154,7 +158,7 @@ func getYamlContent(directories []string) ([]byte, error) {
 					}).Debug()
 
 					if isDir || !rMath {
-						log.WithField("fullFilename", fullFilename).Debug("skipping")
+						log.WithField("fullFilename", fullFilename).Debug("skipping file", filename)
 						continue
 					}
 
@@ -203,38 +207,35 @@ func unmarshal(yamlContent []byte) (*SimpleK8s, error) {
 // Search across all FAT32 partitions the `simplek8s.yaml` file and
 // returns it as a `SimpleK8s` type struct.
 func GetYamlSimpleK8s() (*SimpleK8s, error) {
-	var directories = []string{
-		"/",
-		"/simplek8s/",
-		"/EFI/",
-		"/EFI/simplek8s/",
-		"/boot/",
-		"/boot/simplek8s/",
-		"/boot/EFI/",
-		"/boot/EFI/simplek8s/",
-	}
 
-	// Search for `simplek8s.yaml` content across all FAT32 partitions
-	b, err := getYamlContent(directories)
+	// Get all block devices
+	blockDevices, err := getDevices()
+	log.WithField("devices", blockDevices).Debug()
 	if err != nil {
-		log.WithFields(log.Fields{
-			"content": string(b),
-		}).Warn(err)
+		log.WithField("getYamlContent", err).Warn()
 		return nil, err
 	}
-	if b == nil {
+
+	// Search for `simplek8s.yaml` content across all block devices (filter by FAT32 partitions)
+	var yamlContent []byte
+	if yamlContent, err = getYamlContent(blockDevices); err != nil {
 		log.WithFields(log.Fields{
-			"content": string(b),
+			"content": string(yamlContent),
+		}).Warn(err)
+		return nil, err
+	} else if yamlContent == nil {
+		log.WithFields(log.Fields{
+			"content": string(yamlContent),
 		}).Warn("simplek8s.yaml is empty")
 		return nil, nil
 	}
 
 	// Unmarshal the yaml content
-	simpleK8s, err := unmarshal(b)
+	yamlSk8s, err := unmarshal(yamlContent)
 	if err != nil {
 		return nil, err
 	}
 
-	log.WithField("GetYamlSimpleK8s", simpleK8s).Info()
-	return simpleK8s, nil
+	log.WithField("GetYamlSimpleK8s", yamlSk8s).Info()
+	return yamlSk8s, nil
 }
