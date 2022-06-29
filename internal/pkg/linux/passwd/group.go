@@ -15,6 +15,13 @@ type Group struct {
 	UserList []string
 }
 
+func NewGroup(group Group) Group {
+	if group.UserList == nil {
+		group.UserList = []string{}
+	}
+	return group
+}
+
 func (group Group) Marshal() (string, error) {
 	name := group.Name
 	if len(group.Name) == 0 {

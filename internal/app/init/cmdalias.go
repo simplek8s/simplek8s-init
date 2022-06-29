@@ -1,22 +1,22 @@
 package init
 
 import (
-	"errors"
 	"path/filepath"
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
-	"github.com/jlsalvador/simplek8s/internal/pkg/systemd"
+	systemdGenerator "github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator"
+	"github.com/jlsalvador/simplek8s/internal/pkg/update"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	CMDALIAS_GENERATOR string = "simplek8s-generator"
-	CMDALIAS_UPDATECTL string = "simplek8s-updatectl"
+	CMDALIAS_UPDATE    string = "simplek8s-update"
 )
 
 var CMDALIAS = []string{
 	CMDALIAS_GENERATOR,
-	CMDALIAS_UPDATECTL,
+	CMDALIAS_UPDATE,
 }
 
 func IsCmdAlias(args []string) bool {
@@ -52,7 +52,7 @@ func isCmdAliasSystemdGenerator(args []string) bool {
 	return true
 }
 
-func isCmdAliasUpdateCtl(args []string) bool {
+func isCmdAliasUpdate(args []string) bool {
 	// [0] own cmd
 	if len(args) < 1 {
 		return false
@@ -60,7 +60,7 @@ func isCmdAliasUpdateCtl(args []string) bool {
 
 	fullPathFilename := args[0]
 	got := filepath.Base(fullPathFilename)
-	want := CMDALIAS_UPDATECTL
+	want := CMDALIAS_UPDATE
 	if got != want {
 		return false
 	}
@@ -76,23 +76,22 @@ func cmdAliasSystemdGenerator(args []string) error {
 	earlyDir := args[2]
 	lateDir := args[3]
 
-	if err := systemd.SystemdGenerator(normalDir, earlyDir, lateDir); err != nil {
+	if err := systemdGenerator.CmdSystemdGenerator(normalDir, earlyDir, lateDir); err != nil {
 		return err
 	}
 	return nil
 }
 
-func cmdAliasUpdateCtl(args []string) error {
-	//TODO: unimplemented
-	return errors.New("unimplemented")
+func cmdAliasUpdate(args []string) error {
+	return update.Cmd(args)
 }
 
 func RunCmdAlias(args []string) error {
 	switch {
 	case isCmdAliasSystemdGenerator(args):
 		return cmdAliasSystemdGenerator(args)
-	case isCmdAliasUpdateCtl(args):
-		return cmdAliasUpdateCtl(args)
+	case isCmdAliasUpdate(args):
+		return cmdAliasUpdate(args)
 	}
 	return nil
 }

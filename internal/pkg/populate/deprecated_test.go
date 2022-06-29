@@ -1,4 +1,4 @@
-package sysroot
+package populate
 
 import (
 	"io/fs"
@@ -145,28 +145,9 @@ func validateDirTestFS(t *testing.T, dir string) error {
 	return nil
 }
 
-func TestCopyAll(t *testing.T) {
-	source := t.TempDir()
-	destination := t.TempDir()
-
-	t.Run("populate source for testing", func(t *testing.T) {
-		if err := populateDir(t, source); err != nil {
-			t.Error(err)
-		}
-	})
-
-	t.Run("recursive copy from source to destination", func(t *testing.T) {
-		for _, entry := range testFS {
-			name := filepath.Join(source, entry.name)
-			if err := copyAll(name, destination); err != nil {
-				t.Error(err)
-			}
-		}
-	})
-
-	t.Run("validate destination", func(t *testing.T) {
-		if err := validateDirTestFS(t, destination); err != nil {
-			t.Error(err)
-		}
-	})
-}
+// func Test_populateAssetsCopyToRoot(t *testing.T) {
+// 	output := t.TempDir()
+// 	if err := populateAssetsCopyToRoot(output); err != nil {
+// 		t.Errorf("populateAssetsCopyToRoot() error = %v", err)
+// 	}
+// }

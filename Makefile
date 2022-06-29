@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := build
+
 VERSION:=$(shell date --utc +%Y%m%d%H%M%S)
 export VERSION
 BUILD_DIR=./build
@@ -5,47 +7,42 @@ BINARY=simplek8s-init
 PUBLISH_DEST=vbox1:/mnt/kubernetes/simplek8s-website-pvc-569e9642-8054-4213-a046-63af64297575/simplek8s-init
 LDFLAGS=-X main.Version=${VERSION} -extldflags=-static -w -s
 
-build: build_x86_64 build_arm64
+build_mkdir_dir:
+	mkdir -p "${BUILD_DIR}/dist/archive" "${BUILD_DIR}/dist/rolling"
 
-build_x86_64:
+build_x86-64: build_mkdir_dir
 	GOOS=linux GOARCH=amd64 \
 		go build \
 			-ldflags="${LDFLAGS}" \
-			-o "${BUILD_DIR}/${BINARY}.${VERSION}.x86_64" \
+			-o "${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.x86-64" \
 			cmd/init/main.go
-	ln -sf "${BINARY}.${VERSION}.x86_64" "${BUILD_DIR}/${BINARY}.latest.x86_64"
-	ln -sf "${BINARY}.${VERSION}.x86_64" "${BUILD_DIR}/${BINARY}.x86_64"
+	ln -sf "../archive/${BINARY}.${VERSION}.x86-64" "${BUILD_DIR}/dist/rolling/${BINARY}.latest.x86-64"
 
-build_arm64:
+build_arm64: build_mkdir_dir
 	GOOS=linux GOARCH=arm64 \
 		go build \
 			-ldflags="${LDFLAGS}" \
-			-o "${BUILD_DIR}/${BINARY}.${VERSION}.arm64" \
+			-o "${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.arm64" \
 			cmd/init/main.go
-	ln -sf "${BINARY}.${VERSION}.arm64" "${BUILD_DIR}/${BINARY}.latest.arm64"
-	ln -sf "${BINARY}.${VERSION}.arm64" "${BUILD_DIR}/${BINARY}.arm64"
+	ln -sf "../archive/${BINARY}.${VERSION}.arm64" "${BUILD_DIR}/dist/rolling/${BINARY}.latest.arm64"
 
-build_x86_64_prod: build_x86_64
+build_x86-64_prod: build_x86-64
 	upx --no-progress --best --ultra-brute \
-		"${BUILD_DIR}/${BINARY}.${VERSION}.x86_64"
+		"${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.x86-64"
 
 build_arm64_prod: build_arm64
 	upx --no-progress --best --ultra-brute \
-		"${BUILD_DIR}/${BINARY}.${VERSION}.arm64"
+		"${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.arm64"
 
-publish_x86_64: build_x86_64_prod
-	rsync --links \
-		"${BUILD_DIR}/${BINARY}.x86_64" \
-		"${BUILD_DIR}/${BINARY}.${VERSION}.x86_64" \
+build: build_x86-64 build_arm64
+
+all: build
+
+publish: build_x86-64_prod build_arm64_prod
+	rsync \
+		--links --recursive \
+		"${BUILD_DIR}/dist/" \
 		"${PUBLISH_DEST}/"
-
-publish_arm64: build_arm64_prod
-	rsync --links \
-		"${BUILD_DIR}/${BINARY}.arm64" \
-		"${BUILD_DIR}/${BINARY}.${VERSION}.arm64" \
-		"${PUBLISH_DEST}/"
-
-publish: publish_x86_64 publish_arm64
 
 test:
 	go test -v ./... -cover

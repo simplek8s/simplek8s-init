@@ -2,7 +2,6 @@ package common
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -83,81 +82,38 @@ func TestIsDir(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		dir     string
-		wantErr bool
+		name string
+		dir  string
+		want bool
 	}{
 		{
-			name:    "Everything is fine",
-			dir:     tmpDir,
-			wantErr: false,
+			name: "Everything is fine",
+			dir:  tmpDir,
+			want: true,
 		},
 		{
-			name:    "Empty path",
-			dir:     "",
-			wantErr: true,
+			name: "Empty path",
+			dir:  "",
+			want: false,
 		},
 		{
-			name:    "Path does not exists",
-			dir:     tmpDir + "/abc",
-			wantErr: true,
+			name: "Path does not exists",
+			dir:  tmpDir + "/abc",
+			want: false,
 		},
 		{
-			name:    "Path is not a directory",
-			dir:     tmpDir + "/file",
-			wantErr: true,
+			name: "Path is not a directory",
+			dir:  tmpDir + "/file",
+			want: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := IsDir(tt.dir)
-			if tt.wantErr && got == nil {
-				t.Errorf("wantErr %v, got %v", tt.wantErr, got)
-			} else if !tt.wantErr && got != nil {
-				t.Errorf("wantErr %v, got %v", tt.wantErr, got)
+			if tt.want != got {
+				t.Errorf("want %v, got %v", tt.want, got)
 			}
 		})
 	}
-}
-
-func TestWriteTemplate(t *testing.T) {
-	// logrus.SetOutput(ioutil.Discard)
-	tmpDir := t.TempDir()
-
-	// Write OK template
-	fnOk := "ok.tmpl"
-	tOk := []byte("Template example\n{{ .Text }}\nAnother line\n")
-	if err := os.WriteFile(filepath.Join(tmpDir, fnOk), tOk, 0644); err != nil {
-		t.Error(err)
-	}
-
-	// Write bad template
-	fnBadTmpl := "bad.tmpl"
-	tBadTmpl := []byte("This is a {{ bad template {{")
-	if err := os.WriteFile(filepath.Join(tmpDir, fnBadTmpl), tBadTmpl, 0644); err != nil {
-		t.Error(err)
-	}
-
-	fs := os.DirFS(tmpDir)
-	data := struct {
-		Text string
-	}{"this is a test"}
-
-	t.Run("ok", func(t *testing.T) {
-		if err := WriteTemplate(filepath.Join(tmpDir, "ok.txt"), fs, fnOk, data); err != nil {
-			t.Error(err)
-		}
-	})
-	t.Run("bad template", func(t *testing.T) {
-		if err := WriteTemplate(filepath.Join(tmpDir, "badTemplate.txt"), fs, fnBadTmpl, data); err == nil {
-			t.Error("expected bad template error")
-		}
-	})
-	//TODO
-	// t.Run("bad render", func(t *testing.T) {
-	// 	if err := WriteTemplate(filepath.Join(tmpDir, "badRender.txt"), fs, fnOk, nil); err == nil {
-	// 		t.Error("expected bad template render")
-	// 	}
-	// })
 }

@@ -1,0 +1,52 @@
+package systemdGenerator
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/jlsalvador/simplek8s/internal/pkg/common"
+	sr "github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
+	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/initrd"
+	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/sysroot"
+	log "github.com/sirupsen/logrus"
+)
+
+// Will creates systemd units that will mount and populate paths
+// https://www.freedesktop.org/software/systemd/man/systemd.generator.html#Description
+func CmdSystemdGenerator(generatorDir string, earlyDir string, lateDir string) error {
+	log.WithField("start", "CmdSystemdGenerator").Debug()
+	defer log.WithField("end", "CmdSystemdGenerator").Debug()
+
+	// Validate args
+	if !common.IsDir(generatorDir) {
+		return fmt.Errorf("%q is not a directory", generatorDir)
+	}
+
+	sr, err := sr.New("/")
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// We could be executed by initrd or by sysroot
+	if _, err := os.Stat(filepath.Join(sr.Path, "/etc/initrd-release")); !os.IsNotExist(err) {
+		if err := initrd.CmdSystemdGeneratorInitrd(sr, generatorDir); err != nil {
+			log.Error(err)
+			return err
+		}
+	} else {
+		if err := sysroot.CmdSystemdGeneratorSysroot(sr, generatorDir); err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+
+	// Commit sysroot
+	if err := sr.Write(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}

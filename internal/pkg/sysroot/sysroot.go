@@ -2,27 +2,19 @@ package sysroot
 
 import (
 	"bufio"
-	"embed"
 	"encoding/base64"
 	"fmt"
 	"io/fs"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	"github.com/jlsalvador/simplek8s/internal/pkg/linux/passwd"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	log "github.com/sirupsen/logrus"
-	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
-
-//go:embed templates/*
-var templates embed.FS
 
 type Mount struct {
 	What    string
@@ -254,17 +246,19 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
 			}
 			if len(content) > 0 {
 				sysroot.Directories = append(sysroot.Directories, Directory{
-					Path: home + "/.ssh",
-					Mode: 0700,
-					Uid:  uid,
-					Gid:  gid,
+					Overwrite: false,
+					Path:      home + "/.ssh",
+					Mode:      0700,
+					Uid:       uid,
+					Gid:       gid,
 				})
 				sysroot.Files = append(sysroot.Files, File{
-					Filename: home + "/.ssh/authorized_keys",
-					Content:  []byte(content),
-					Mode:     0600,
-					Uid:      uid,
-					Gid:      gid,
+					Overwrite: false,
+					Filename:  home + "/.ssh/authorized_keys",
+					Content:   []byte(content),
+					Mode:      0600,
+					Uid:       uid,
+					Gid:       gid,
 				})
 			}
 		}
@@ -330,6 +324,18 @@ func getBoolByDefault(pointer *bool, fallback bool) bool {
 	return fallback
 }
 
+func updateOrAppendLink(links []Link, link Link) []Link {
+	for i, l := range links {
+		if l.Path == link.Path {
+			// Replace
+			links[i] = link
+			return links
+		}
+	}
+	// Not found, just append
+	return append(links, link)
+}
+
 func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
 		for _, link := range simpleK8s.Storage.Links {
@@ -342,7 +348,7 @@ func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
 			isOverwrite := getBoolByDefault(link.Overwrite, true)
 			isHard := getBoolByDefault(link.Hard, false)
 
-			sysroot.Links = append(sysroot.Links, Link{
+			sysroot.Links = updateOrAppendLink(sysroot.Links, Link{
 				Overwrite: isOverwrite,
 				Path:      link.Path,
 				Target:    link.Target,
@@ -353,6 +359,18 @@ func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
 		}
 	}
 	return nil
+}
+
+func updateOrAppendDirectory(directories []Directory, directory Directory) []Directory {
+	for i, d := range directories {
+		if d.Path == directory.Path {
+			// Replace
+			directories[i] = directory
+			return directories
+		}
+	}
+	// Not found, just append
+	return append(directories, directory)
 }
 
 func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
@@ -375,7 +393,7 @@ func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
 				}
 			}
 
-			sysroot.Directories = append(sysroot.Directories, Directory{
+			sysroot.Directories = updateOrAppendDirectory(sysroot.Directories, Directory{
 				Overwrite: isOverwrite,
 				Path:      directory.Path,
 				Mode:      mode,
@@ -385,6 +403,18 @@ func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
 		}
 	}
 	return nil
+}
+
+func updateOrAppendFile(files []File, file File) []File {
+	for i, d := range files {
+		if d.Filename == file.Filename {
+			// Replace
+			files[i] = file
+			return files
+		}
+	}
+	// Not found, just append
+	return append(files, file)
 }
 
 func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
@@ -421,7 +451,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 				}
 			}
 
-			sysroot.Files = append(sysroot.Files, File{
+			sysroot.Files = updateOrAppendFile(sysroot.Files, File{
 				Overwrite: isOverwrite,
 				Filename:  filename,
 				Content:   content,
@@ -434,20 +464,24 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 	return nil
 }
 
-func (sysroot *Sysroot) feedByYAML(simpleK8s yaml.SimpleK8s) error {
-	if err := sysroot.parseYAMLGroups(simpleK8s); err != nil {
+func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.SimpleK8s) error {
+	if simpleK8s == nil {
+		return nil
+	}
+
+	if err := sysroot.parseYAMLGroups(*simpleK8s); err != nil {
 		return err
 	}
-	if err := sysroot.parseYAMLUsers(simpleK8s); err != nil {
+	if err := sysroot.parseYAMLUsers(*simpleK8s); err != nil {
 		return err
 	}
-	if err := sysroot.parseYAMLLinks(simpleK8s); err != nil {
+	if err := sysroot.parseYAMLLinks(*simpleK8s); err != nil {
 		return err
 	}
-	if err := sysroot.parseYAMLDirectories(simpleK8s); err != nil {
+	if err := sysroot.parseYAMLDirectories(*simpleK8s); err != nil {
 		return err
 	}
-	if err := sysroot.parseYAMLFiles(simpleK8s); err != nil {
+	if err := sysroot.parseYAMLFiles(*simpleK8s); err != nil {
 		return err
 	}
 	return nil
@@ -516,7 +550,7 @@ func (sysroot *Sysroot) parseFilenamePasswd(filename string) error {
 	})
 }
 
-func (sysroot *Sysroot) feedByFiles() error {
+func (sysroot *Sysroot) FeedByCurrentFiles() error {
 	var filename string
 
 	filename = sysroot.Path + "/etc/shadow"
@@ -524,7 +558,7 @@ func (sysroot *Sysroot) feedByFiles() error {
 		log.WithFields(log.Fields{
 			"filename": filename,
 			"sysroot":  sysroot,
-		}).Error(err)
+		}).Debug(err)
 	}
 
 	filename = sysroot.Path + "/etc/group"
@@ -532,7 +566,7 @@ func (sysroot *Sysroot) feedByFiles() error {
 		log.WithFields(log.Fields{
 			"filename": filename,
 			"sysroot":  sysroot,
-		}).Error(err)
+		}).Debug(err)
 	}
 
 	filename = sysroot.Path + "/etc/passwd"
@@ -540,7 +574,7 @@ func (sysroot *Sysroot) feedByFiles() error {
 		log.WithFields(log.Fields{
 			"filename": filename,
 			"sysroot":  sysroot,
-		}).Error(err)
+		}).Debug(err)
 	}
 
 	return nil
@@ -560,11 +594,15 @@ func writeFile(filename string, content []byte, mode fs.FileMode, uid int, gid i
 	return nil
 }
 
-func writeFileEtcShadow(sysroot Sysroot) error {
-	filename := sysroot.Path + "/etc/shadow"
+func (sr *Sysroot) writeShadow() error {
+	if len(sr.Shadows) == 0 {
+		return nil
+	}
+
+	filename := sr.Path + "/etc/shadow"
 	mode := fs.FileMode(0600)
 	content := ""
-	for _, shadow := range sysroot.Shadows {
+	for _, shadow := range sr.Shadows {
 		if line, err := shadow.Marshal(); err != nil {
 			return err
 		} else {
@@ -574,11 +612,15 @@ func writeFileEtcShadow(sysroot Sysroot) error {
 	return writeFile(filename, []byte(content), mode, 0, 0)
 }
 
-func writeFileEtcGroup(sysroot Sysroot) error {
-	filename := sysroot.Path + "/etc/group"
+func (sr *Sysroot) writeGroups() error {
+	if len(sr.Groups) == 0 {
+		return nil
+	}
+
+	filename := sr.Path + "/etc/group"
 	mode := fs.FileMode(0644)
 	content := ""
-	for _, group := range sysroot.Groups {
+	for _, group := range sr.Groups {
 		if line, err := group.Marshal(); err != nil {
 			return err
 		} else {
@@ -588,11 +630,15 @@ func writeFileEtcGroup(sysroot Sysroot) error {
 	return writeFile(filename, []byte(content), mode, 0, 0)
 }
 
-func writeFileEtcPasswd(sysroot Sysroot) error {
-	filename := sysroot.Path + "/etc/passwd"
+func (sr *Sysroot) writeUsers() error {
+	if len(sr.Users) == 0 {
+		return nil
+	}
+
+	filename := sr.Path + "/etc/passwd"
 	mode := fs.FileMode(0644)
 	content := ""
-	for _, user := range sysroot.Users {
+	for _, user := range sr.Users {
 		if line, err := user.Marshal(); err != nil {
 			return err
 		} else {
@@ -602,7 +648,23 @@ func writeFileEtcPasswd(sysroot Sysroot) error {
 	return writeFile(filename, []byte(content), mode, 0, 0)
 }
 
-func writeDirectories(sysroot Sysroot) error {
+func (sysroot *Sysroot) writeLinks() error {
+	for _, link := range sysroot.Links {
+		if err := common.CreateSymlink(
+			link.Path,
+			link.Target,
+			link.Overwrite,
+			link.Uid,
+			link.Gid,
+			link.Hard,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sysroot *Sysroot) writeDirectories() error {
 	for _, directory := range sysroot.Directories {
 		if err := os.MkdirAll(sysroot.Path+directory.Path, directory.Mode); err != nil {
 			return err
@@ -614,7 +676,7 @@ func writeDirectories(sysroot Sysroot) error {
 	return nil
 }
 
-func writeFiles(sysroot Sysroot) error {
+func (sysroot *Sysroot) writeFiles() error {
 	for _, file := range sysroot.Files {
 		filename := sysroot.Path + file.Filename
 
@@ -632,7 +694,8 @@ func writeFiles(sysroot Sysroot) error {
 	return nil
 }
 
-func (sysroot *Sysroot) write() error {
+// Commit all changes to Sysroot.Path
+func (sysroot *Sysroot) Write() error {
 	log.WithFields(log.Fields{
 		"shadows":     sysroot.Shadows,
 		"groups":      sysroot.Groups,
@@ -641,173 +704,41 @@ func (sysroot *Sysroot) write() error {
 		"files":       sysroot.Files,
 	}).Debug()
 
-	if err := writeFileEtcShadow(*sysroot); err != nil {
+	if err := sysroot.writeLinks(); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := writeFileEtcGroup(*sysroot); err != nil {
+	if err := sysroot.writeDirectories(); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := writeFileEtcPasswd(*sysroot); err != nil {
+	if err := sysroot.writeFiles(); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := writeDirectories(*sysroot); err != nil {
+	if err := sysroot.writeShadow(); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := writeFiles(*sysroot); err != nil {
+	if err := sysroot.writeGroups(); err != nil {
+		log.Error(err)
+		return err
+	}
+	if err := sysroot.writeUsers(); err != nil {
 		log.Error(err)
 		return err
 	}
 	return nil
 }
 
-func newInstance(path string) (*Sysroot, error) {
-	if err := common.IsDir(path); err != nil {
-		return nil, err
+func New(path string) (*Sysroot, error) {
+	if !common.IsDir(path) {
+		return nil, fmt.Errorf("%q is not a directory", path)
 	}
 
 	result := Sysroot{
 		Path: path,
-		Shadows: []passwd.Shadow{
-			passwd.NewShadow(passwd.Shadow{
-				Name:     "root",
-				Password: "!!",
-			}),
-		},
-		Groups: []passwd.Group{
-			{
-				Name:     "root",
-				Password: "",
-				Gid:      0,
-				UserList: []string{},
-			},
-		},
-		Users: []passwd.User{
-			{
-				Name: "root",
-				Uid:  0,
-				Gid:  0,
-				Gecos: []string{
-					"Super User",
-				},
-				Home:  "/root",
-				Shell: "/usr/bin/sh",
-			},
-		},
 	}
 
 	return &result, nil
-}
-
-func hashPassword(plainPassword string) string {
-	// Generate a random string for use in the salt
-	const charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	s := make([]byte, 8)
-	for i := range s {
-		s[i] = charset[seededRand.Intn(len(charset))]
-	}
-	salt := []byte(fmt.Sprintf("$6$%s", s))
-	// use salt to hash user-supplied password
-	c := sha512_crypt.New()
-	hash, err := c.Generate([]byte(plainPassword), salt)
-	if err != nil {
-		fmt.Printf("error hashing user's supplied password: %s\n", err)
-		os.Exit(1)
-	}
-
-	return string(hash)
-}
-
-func generatePassword() (plain string, hashed string) {
-	plain = strings.TrimRight(gofakeit.Sentence(8), ".")
-	hashed = hashPassword(plain)
-	return
-}
-
-func configureNonPersistentSession(sysroot *Sysroot) error {
-	rootPlainPassword, rootHashedPassword := generatePassword()
-
-	// Set the root password
-	rootShadow := passwd.NewShadow(passwd.Shadow{
-		Name:     "root",
-		Password: rootHashedPassword,
-	})
-	sysroot.Shadows = updateOrAppendShadow(sysroot.Shadows, rootShadow)
-
-	// Write root password into issue
-	fname := filepath.Join(sysroot.Path, "/etc/issue.d/80-live.issue")
-	data := fmt.Sprintf("\n\\e{blink}You are running a non persistent session!\\e{reset}\n  Root pwd: %s\n", rootPlainPassword)
-	if err := os.WriteFile(fname, []byte(data), 0644); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Will write `/etc` files to configure sysroot
-func Configure(path string, isLive bool) error {
-	log.Debug("init simplek8s.yaml parser")
-
-	var sysroot *Sysroot
-	var err error
-	if sysroot, err = newInstance(path); err != nil {
-		log.WithField("path", path).Error(err)
-		return err
-	}
-
-	// Read the current files from `path` and configure `sysroot`
-	if err := sysroot.feedByFiles(); err != nil {
-		log.WithFields(log.Fields{
-			"sysroot": sysroot,
-		}).Error(err)
-		return err
-	}
-
-	// Read the `simplek8s.yaml` file and configure `sysroot`
-	var simpleK8s *yaml.SimpleK8s
-	if simpleK8s, err = yaml.GetYamlSimpleK8s(); err != nil {
-		return err
-	} else if simpleK8s == nil {
-		log.WithField("path", path).Warn("can not find the simplek8s.yaml file")
-	} else if err := sysroot.feedByYAML(*simpleK8s); err != nil {
-		log.WithFields(log.Fields{
-			"simpleK8s": simpleK8s,
-			"sysroot":   sysroot,
-		}).Error(err)
-		return err
-	}
-
-	isNonPersistentSession := isLive && simpleK8s == nil
-	if isNonPersistentSession {
-		configureNonPersistentSession(sysroot)
-	}
-
-	// Write `/etc/ssh/sshd_config`
-	sshdFilename := filepath.Join(sysroot.Path, "/etc/ssh/sshd_config")
-	data := struct {
-		AllowRootPassword bool
-	}{
-		AllowRootPassword: isNonPersistentSession,
-	}
-	if err := common.WriteTemplate(sshdFilename, templates, "templates/sshd_config.tmpl", data); err != nil {
-		log.WithFields(log.Fields{
-			"filename": sshdFilename,
-			"data":     data,
-		}).Error(err)
-		return err
-	}
-
-	// Commit any changes into `path`
-	if err := sysroot.write(); err != nil {
-		log.WithFields(log.Fields{
-			"sysroot": sysroot,
-		}).Error(err)
-		return err
-	}
-
-	return nil
 }

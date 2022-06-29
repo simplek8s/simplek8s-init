@@ -17,7 +17,7 @@ func showHelp() {
 }
 
 func main() {
-	if debug, _ := strconv.ParseBool(common.GetEnv("DEBUG", "true")); debug {
+	if debug, _ := strconv.ParseBool(common.GetEnv("DEBUG", "false")); debug || common.IsCmdlineDebug() {
 		log.SetLevel(log.DebugLevel)
 		log.SetReportCaller(true)
 	}

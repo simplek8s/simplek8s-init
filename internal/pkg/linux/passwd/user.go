@@ -20,6 +20,16 @@ type User struct {
 	Shell    string
 }
 
+func NewUser(user User) User {
+	if user.Home == "" {
+		user.Home = "/"
+	}
+	if user.Shell == "" {
+		user.Shell = "/bin/false"
+	}
+	return user
+}
+
 func (user User) Marshal() (string, error) {
 	name := user.Name
 	if len(user.Name) == 0 {

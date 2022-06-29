@@ -135,6 +135,8 @@ func Test_getYamlContent(t *testing.T) {
 		t.Fatal("yaml content is empty")
 	}
 
+	//TODO: Add test cases.
+	//
 	// type args struct {
 	// 	directories  []string
 	// 	blockDevices []string
@@ -177,7 +179,6 @@ func Test_getYamlContent(t *testing.T) {
 	// 		name:    "disk efi partition, boot/simplek8s path",
 	// 		wantErr: false,
 	// 	},
-	// 	// TODO: Add test cases.
 	// }
 	// for _, tt := range tests {
 	// 	t.Run(tt.name, func(t *testing.T) {

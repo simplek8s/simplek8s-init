@@ -33,10 +33,11 @@ type simpleK8sUsers struct {
 	System            *bool    `yaml:"system,omitempty"`
 }
 type simpleK8sMounts struct {
-	What    string  `yaml:"what,omitempty"`
-	Where   string  `yaml:"where,omitempty"`
-	Type    *string `yaml:"type,omitempty"`
-	Options *string `yaml:"options,omitempty"`
+	What    string   `yaml:"what,omitempty"`
+	Where   string   `yaml:"where,omitempty"`
+	Type    *string  `yaml:"type,omitempty"`
+	Options *string  `yaml:"options,omitempty"`
+	After   []string `yaml:"after,omitempty"`
 }
 type simpleK8sLinks struct {
 	Overwrite *bool   `yaml:"overwrite,omitempty"`
@@ -226,7 +227,7 @@ func GetYamlSimpleK8s() (*SimpleK8s, error) {
 	} else if yamlContent == nil {
 		log.WithFields(log.Fields{
 			"content": string(yamlContent),
-		}).Warn("simplek8s.yaml is empty")
+		}).Warn("can not find simplek8s.yaml")
 		return nil, nil
 	}
 

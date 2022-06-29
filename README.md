@@ -9,13 +9,37 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
 - `version` (string): Currently must be `1`
 - _`users`_ (list of objects):
   - `name` (string):
-  - `passwordHash` (string):
-  - `sshAuthorizedKeys` (string):
+  - _`passwordHash`_ (string):
+  - _`sshAuthorizedKeys`_ (string):
 - _`storage`_ (object):
-  - _`mounts`_ (list of objects):
   - _`links`_ (list of objects):
   - _`directories`_ (list of objects):
   - _`files`_ (list of objects):
+
+
+Minimal example:
+
+```yaml
+version: "1"
+users:
+  - name: "root"
+    sshAuthorizedKeys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com"
+storage:
+  files:
+    - path: /run/systemd/system/var.mount
+      content: |
+        [Unit]
+        Description=/var
+
+        [Mount]
+        Where=/var
+        What=/dev/sda2
+
+        [Install]
+        RequiredBy=local-fs.target
+```
+
 
 Full example below:
 
@@ -28,15 +52,22 @@ users:
     sshAuthorizedKeys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com"
 storage:
-  mounts:
-    - what: /dev/sda2
-      where: /var
-      type: auto
-      options: defaults
   links:
     - overwrite: false
       path: /etc/somedir
       target: /root/somedir
+      owner: root:root
+      hard: false
+    - overwrite: true
+      # Enable var.mount for local-fs.target
+      path: /run/systemd/system/local-fs.target.requires/var.mount
+      target: /run/systemd/system/var.mount
+      owner: root:root
+      hard: false
+    - overwrite: false
+      # Enable home.mount for multi-user.target
+      path: /etc/systemd/system/local-fs.target.wants/home.mount
+      target: /etc/systemd/system/home.mount
       owner: root:root
       hard: false
     - overwrite: true
@@ -55,13 +86,51 @@ storage:
       owner: root:root
       permissions: "0750"
   files:
-    - overwrite: false
+    - # Mount /var
+      overwrite: true
+      path: /run/systemd/system/var.mount
+      encoding:
+      content: |
+        [Unit]
+        Description=/var
+
+        [Mount]
+        Where=/var
+        What=/dev/sda2
+        Type=auto
+        Options=defaults
+
+        [Install]
+        RequiredBy=local-fs.target
+      owner: root:root
+      permissions: "0644"
+    - # Mount /home
+      overwrite: false
+      path: /etc/systemd/system/home.mount
+      encoding:
+      content: |
+        [Unit]
+        Description=/home
+
+        [Mount]
+        Where=/home
+        What=/dev/sda3
+        Type=auto
+        Options=defaults
+
+        [Install]
+        WantedBy=local-fs.target
+      owner: root:root
+      permissions: "0644"
+    - # A example file
+      overwrite: false
       path: /root/somedir/somefile
       encoding: b64
       content: SGVsbG8gd29ybGQK
       owner: root:root
       permissions: "0644"
-    - overwrite: true
+    - # Add a global executable script
+      overwrite: true
       path: /usr/local/bin/hello
       encoding:
       content: |
@@ -69,7 +138,8 @@ storage:
         echo "Hello world"
       owner: root:root
       permissions: "0755"
-    - overwrite: false
+    - # Configure static network address
+      overwrite: false
       path: /etc/systemd/network/50-wired.network
       encoding:
       content: |

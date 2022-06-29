@@ -2,10 +2,12 @@ package common
 
 import (
 	"bytes"
-	"fmt"
 	"io/fs"
 	"os"
+	"os/user"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"text/template"
 
 	log "github.com/sirupsen/logrus"
@@ -27,22 +29,26 @@ func IsStringInList(value string, list []string) bool {
 	return false
 }
 
-func IsDir(path string) error {
+func IsDir(path string) bool {
 	if len(path) == 0 {
-		err := fmt.Errorf("path %q is empty", path)
-		return err
+		log.Debugf("path %q is empty", path)
+		return false
 	}
 
 	if stat, err := os.Stat(path); err != nil {
-		return err
+		log.Debug(err)
+		return false
 	} else if !stat.IsDir() {
-		err := fmt.Errorf("path %q is not a directory", path)
-		return err
+		log.Debugf("path %q is not a directory", path)
+		return false
 	}
-	return nil
+	return true
 }
 
-func RenderTemplate(templates fs.FS, templateFilename string, data any) (string, error) {
+func RenderTemplate(templates fs.FS, templateFilename string, data any) ([]byte, error) {
+	log.WithField("start", "RenderTemplate").Debug()
+	defer log.WithField("stop", "RenderTemplate").Debug()
+
 	// Parse template
 	tmpl, err := template.ParseFS(templates, templateFilename)
 	if err != nil {
@@ -50,7 +56,7 @@ func RenderTemplate(templates fs.FS, templateFilename string, data any) (string,
 			"templates": templates,
 			"tmpl":      tmpl,
 		}).Error(err)
-		return "", err
+		return nil, err
 	}
 	log.Debug(tmpl)
 
@@ -61,46 +67,103 @@ func RenderTemplate(templates fs.FS, templateFilename string, data any) (string,
 			"tmpl": tmpl,
 			"data": data,
 		}).Error(err)
-		return "", err
+		return nil, err
 	}
 	log.Debug(content)
 
-	return content.String(), nil
+	return content.Bytes(), nil
 }
 
-func WriteTemplate(filename string, templates fs.FS, templateFilename string, data any) error {
-	var content string
-	var err error
+func CreateSymlink(path string, target string, overwrite bool, uid int, gid int, hard bool) error {
+	log.WithFields(log.Fields{
+		"start":     "CreateSymlink",
+		"path":      path,
+		"target":    target,
+		"overwrite": overwrite,
+		"uid":       uid,
+		"gid":       gid,
+		"hard":      hard,
+	}).Debug()
+	defer log.WithField("stop", "CreateSymlink").Debug()
 
-	// Render template into `content` var
-	if content, err = RenderTemplate(
-		templates,
-		templateFilename,
-		data,
-	); err != nil {
-		return err
+	// Overwrite?
+	if info, _ := os.Stat(path); info != nil {
+		if !overwrite {
+			// Dont overwrite exist file
+			return nil
+		} else {
+			// Remove exist file
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Create destination directory
-	dirname := filepath.Dir(filename)
+	dirname := filepath.Dir(path)
 	if err := os.MkdirAll(dirname, 0755); err != nil {
 		log.WithFields(log.Fields{
-			"filename": filename,
-			"dirname":  dirname,
+			"path": path,
 		}).Error(err)
 		return err
 	}
 
-	// Write file with `content` var
-	mode := fs.FileMode(0644)
-	if err := os.WriteFile(filename, []byte(content), mode); err != nil {
+	if hard {
+		// Create hardlink
+		if err := os.Link(target, path); err != nil {
+			log.WithFields(log.Fields{
+				"target": target,
+				"path":   path,
+			}).Error(err)
+			return err
+		}
+	} else {
+		// Create symlink
+		if err := os.Symlink(target, path); err != nil {
+			log.WithFields(log.Fields{
+				"target": target,
+				"path":   path,
+			}).Error(err)
+			return err
+		}
+	}
+
+	// Owner
+	if err := os.Lchown(path, uid, gid); err != nil {
 		log.WithFields(log.Fields{
-			"filename": filename,
-			"content":  content,
-			"mode":     mode,
+			"path": path,
+			"uid":  uid,
+			"gid":  gid,
 		}).Error(err)
 		return err
 	}
 
 	return nil
+}
+
+func GetOwnUidGid() (int, int, error) {
+	user, err := user.Current()
+	if err != nil {
+		return -1, -1, err
+	}
+	uid, err := strconv.Atoi(user.Uid)
+	if err != nil {
+		return -1, -1, err
+	}
+	gid, err := strconv.Atoi(user.Gid)
+	if err != nil {
+		return -1, -1, err
+	}
+	return uid, gid, nil
+}
+
+func IsCmdlineDebug() bool {
+	if cmdlineContent, err := os.ReadFile("/proc/cmdline"); err != nil {
+		log.Warn(err)
+	} else if match, err := regexp.Match(`\s*debug\s*`, cmdlineContent); err != nil {
+		log.Warn(err)
+	} else if match {
+		return true
+	}
+	return false
 }
