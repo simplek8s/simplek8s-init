@@ -338,14 +338,21 @@ func updateOrAppendLink(links []Link, link Link) []Link {
 
 func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
+
+		// Set UID and GID from own process by default
+		defaultUid, defaultGid, err := common.GetOwnUidGid()
+		if err != nil {
+			return err
+		}
+
 		for _, link := range simpleK8s.Storage.Links {
-			uid := 0
-			gid := 0
+			uid := defaultUid
+			gid := defaultGid
 			if link.Owner != nil {
 				uid, gid = getUidGidFromString(*link.Owner, sysroot.Groups, sysroot.Users)
 			}
 
-			isOverwrite := getBoolByDefault(link.Overwrite, true)
+			isOverwrite := getBoolByDefault(link.Overwrite, false)
 			isHard := getBoolByDefault(link.Hard, false)
 
 			sysroot.Links = updateOrAppendLink(sysroot.Links, Link{
@@ -375,11 +382,18 @@ func updateOrAppendDirectory(directories []Directory, directory Directory) []Dir
 
 func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
-		for _, directory := range simpleK8s.Storage.Directories {
-			isOverwrite := getBoolByDefault(directory.Overwrite, true)
 
-			uid := 0
-			gid := 0
+		// Set UID and GID from own process by default
+		defaultUid, defaultGid, err := common.GetOwnUidGid()
+		if err != nil {
+			return err
+		}
+
+		for _, directory := range simpleK8s.Storage.Directories {
+			isOverwrite := getBoolByDefault(directory.Overwrite, false)
+
+			uid := defaultUid
+			gid := defaultGid
 			if directory.Owner != nil {
 				uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
 			}
@@ -419,17 +433,24 @@ func updateOrAppendFile(files []File, file File) []File {
 
 func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
+
+		// Set UID and GID from own process by default
+		defaultUid, defaultGid, err := common.GetOwnUidGid()
+		if err != nil {
+			return err
+		}
+
 		for _, file := range simpleK8s.Storage.Files {
 			filename := file.Path
-			isOverwrite := getBoolByDefault(file.Overwrite, true)
+			isOverwrite := getBoolByDefault(file.Overwrite, false)
 
-			uid := 0
-			gid := 0
+			uid := defaultUid
+			gid := defaultGid
 			if file.Permissions != nil {
 				uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
 			}
 
-			var mode fs.FileMode = 0644
+			var mode fs.FileMode = 0664
 			if file.Permissions != nil {
 				if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
 					return err
