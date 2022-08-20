@@ -16,23 +16,6 @@ import (
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
 
-// // Fill "/" by "/usr/share/factory/*" without overwrite
-// func populateSysrootByUsrShareFactory(output string) error {
-// 	log.WithFields(log.Fields{
-// 		"start":  "populateSysrootByUsrShareFactory",
-// 		"output": output,
-// 	}).Debug()
-// 	defer log.WithField("end", "populateSysrootByUsrShareFactory").Debug()
-
-// 	return copy.CopyDir(
-// 		"/usr/share/factory",
-// 		output,
-// 		&copy.CopyOptions{
-// 			Overwrite: false,
-// 		},
-// 	)
-// }
-
 // Configure "/usr/share/factory/etc/ssh/sshd_config"
 func populateSysrootSshd(output string, sr *sysroot.Sysroot, allowRootPassword bool) error {
 	log.WithFields(log.Fields{
@@ -111,18 +94,18 @@ func generatePasswordPlainHashed() (string, string, error) {
 }
 
 // Ensure a "root" user, passwd and shadow entry
-func populateSysrootUsers(output string, sr *sysroot.Sysroot, generatePassword bool) error {
+func populateSysrootUsers(output string, sr *sysroot.Sysroot, generateRootPassword bool) error {
 	log.WithFields(log.Fields{
 		"start":            "populateSysrootUsers",
 		"output":           output,
 		"sr":               sr,
-		"generatePassword": generatePassword,
+		"generatePassword": generateRootPassword,
 	}).Debug()
 	defer log.WithField("end", "populateSysrootUsers").Debug()
 
-	// Root password
+	// Lets set the "root" password
 	pwdHashed := "!!"
-	if generatePassword {
+	if generateRootPassword {
 		// Generate a random "root" password
 		var pwdPlain string
 		var err error
@@ -150,153 +133,91 @@ func populateSysrootUsers(output string, sr *sysroot.Sysroot, generatePassword b
 		}
 	}
 
-	sr.Shadows = append(sr.Shadows, passwd.NewShadow(passwd.Shadow{
-		Name:     "root",
-		Password: pwdHashed,
-	}), passwd.NewShadow(passwd.Shadow{
-		Name: "nobody",
-	}), passwd.NewShadow(passwd.Shadow{
-		Name: "dbus",
-	}), passwd.NewShadow(passwd.Shadow{
-		Name: "sshd",
-	}), passwd.NewShadow(passwd.Shadow{
-		Name: "systemd-network",
-	}), passwd.NewShadow(passwd.Shadow{
-		Name: "systemd-resolve",
-	}), passwd.NewShadow(passwd.Shadow{
-		Name: "systemd-timesync",
-	}))
+	sr.Shadows = append(sr.Shadows,
+		passwd.NewShadow(passwd.Shadow{Name: "root", Password: pwdHashed}),
+		passwd.NewShadow(passwd.Shadow{Name: "nobody"}),
+		passwd.NewShadow(passwd.Shadow{Name: "dbus"}),
+		passwd.NewShadow(passwd.Shadow{Name: "sshd"}),
+		passwd.NewShadow(passwd.Shadow{Name: "systemd-network"}),
+		passwd.NewShadow(passwd.Shadow{Name: "systemd-resolve"}),
+		passwd.NewShadow(passwd.Shadow{Name: "systemd-timesync"}),
+	)
 
-	sr.Groups = append(sr.Groups, passwd.Group{
-		Name: "root",
-		Gid:  0,
-	}, passwd.NewGroup(passwd.Group{
-		Name: "nobody",
-		Gid:  65534,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "adm",
-		Gid:  999,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "wheel",
-		Gid:  998,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "utmp",
-		Gid:  997,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "audio",
-		Gid:  996,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "cdrom",
-		Gid:  995,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "dialout",
-		Gid:  994,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "disk",
-		Gid:  993,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "input",
-		Gid:  992,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "kmem",
-		Gid:  991,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "kvm",
-		Gid:  990,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "lp",
-		Gid:  989,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "render",
-		Gid:  988,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "sgx",
-		Gid:  987,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "tape",
-		Gid:  986,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "tty",
-		Gid:  5,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "video",
-		Gid:  985,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "users",
-		Gid:  984,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "systemd-journal",
-		Gid:  983,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "dbus",
-		Gid:  982,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "sshd",
-		Gid:  981,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "systemd-network",
-		Gid:  980,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "systemd-resolve",
-		Gid:  979,
-	}), passwd.NewGroup(passwd.Group{
-		Name: "systemd-timesync",
-		Gid:  978,
-	}))
+	sr.Groups = append(sr.Groups,
+		passwd.Group{Name: "root", Gid: 0},
+		passwd.NewGroup(passwd.Group{Name: "nobody", Gid: 65534}),
+		passwd.NewGroup(passwd.Group{Name: "adm", Gid: 999}),
+		passwd.NewGroup(passwd.Group{Name: "wheel", Gid: 998}),
+		passwd.NewGroup(passwd.Group{Name: "utmp", Gid: 997}),
+		passwd.NewGroup(passwd.Group{Name: "audio", Gid: 996}),
+		passwd.NewGroup(passwd.Group{Name: "cdrom", Gid: 995}),
+		passwd.NewGroup(passwd.Group{Name: "dialout", Gid: 994}),
+		passwd.NewGroup(passwd.Group{Name: "disk", Gid: 993}),
+		passwd.NewGroup(passwd.Group{Name: "input", Gid: 992}),
+		passwd.NewGroup(passwd.Group{Name: "kmem", Gid: 991}),
+		passwd.NewGroup(passwd.Group{Name: "kvm", Gid: 990}),
+		passwd.NewGroup(passwd.Group{Name: "lp", Gid: 989}),
+		passwd.NewGroup(passwd.Group{Name: "render", Gid: 988}),
+		passwd.NewGroup(passwd.Group{Name: "sgx", Gid: 987}),
+		passwd.NewGroup(passwd.Group{Name: "tape", Gid: 986}),
+		passwd.NewGroup(passwd.Group{Name: "tty", Gid: 5}),
+		passwd.NewGroup(passwd.Group{Name: "video", Gid: 985}),
+		passwd.NewGroup(passwd.Group{Name: "users", Gid: 984}),
+		passwd.NewGroup(passwd.Group{Name: "systemd-journal", Gid: 983}),
+		passwd.NewGroup(passwd.Group{Name: "dbus", Gid: 982}),
+		passwd.NewGroup(passwd.Group{Name: "sshd", Gid: 981}),
+		passwd.NewGroup(passwd.Group{Name: "systemd-network", Gid: 980}),
+		passwd.NewGroup(passwd.Group{Name: "systemd-resolve", Gid: 979}),
+		passwd.NewGroup(passwd.Group{Name: "systemd-timesync", Gid: 978}),
+	)
 
-	sr.Users = append(sr.Users, passwd.NewUser(passwd.User{
-		Name: "root",
-		Uid:  0,
-		Gid:  0,
-		Gecos: []string{
-			"Super User",
-		},
-		Home:  "/root",
-		Shell: "/usr/bin/sh",
-	}), passwd.NewUser(passwd.User{
-		Name: "nobody",
-		Uid:  65534,
-		Gid:  65534,
-		Gecos: []string{
-			"Nobody",
-		},
-	}), passwd.NewUser(passwd.User{
-		Name: "dbus",
-		Uid:  982,
-		Gid:  982,
-		Gecos: []string{
-			"System Message Bus",
-		},
-	}), passwd.NewUser(passwd.User{
-		Name: "sshd",
-		Uid:  981,
-		Gid:  981,
-		Gecos: []string{
-			"SSH drop priv user",
-		},
-		Home: "/var/empty",
-	}), passwd.NewUser(passwd.User{
-		Name: "systemd-network",
-		Uid:  980,
-		Gid:  980,
-		Gecos: []string{
-			"systemd Network Management",
-		},
-	}), passwd.NewUser(passwd.User{
-		Name: "systemd-resolve",
-		Uid:  979,
-		Gid:  979,
-		Gecos: []string{
-			"systemd Resolver",
-		},
-	}), passwd.NewUser(passwd.User{
-		Name: "systemd-timesync",
-		Uid:  978,
-		Gid:  978,
-		Gecos: []string{
-			"systemd Time Synchronization",
-		},
-	}))
+	sr.Users = append(sr.Users,
+		passwd.NewUser(passwd.User{
+			Name:  "root",
+			Uid:   0,
+			Gid:   0,
+			Gecos: []string{"Super User"},
+			Home:  "/root",
+			Shell: "/usr/bin/sh",
+		}),
+		passwd.NewUser(passwd.User{
+			Name:  "nobody",
+			Uid:   65534,
+			Gid:   65534,
+			Gecos: []string{"Nobody"},
+		}),
+		passwd.NewUser(passwd.User{
+			Name:  "dbus",
+			Uid:   982,
+			Gid:   982,
+			Gecos: []string{"System Message Bus"},
+		}),
+		passwd.NewUser(passwd.User{
+			Name:  "sshd",
+			Uid:   981,
+			Gid:   981,
+			Gecos: []string{"SSH drop priv user"},
+			Home:  "/var/empty",
+		}),
+		passwd.NewUser(passwd.User{
+			Name:  "systemd-network",
+			Uid:   980,
+			Gid:   980,
+			Gecos: []string{"systemd Network Management"},
+		}),
+		passwd.NewUser(passwd.User{
+			Name:  "systemd-resolve",
+			Uid:   979,
+			Gid:   979,
+			Gecos: []string{"systemd Resolver"},
+		}),
+		passwd.NewUser(passwd.User{
+			Name:  "systemd-timesync",
+			Uid:   978,
+			Gid:   978,
+			Gecos: []string{"systemd Time Synchronization"},
+		}),
+	)
 
 	return nil
 }
@@ -314,7 +235,7 @@ func CmdPopulateSysroot(output string) error {
 		return err
 	}
 	allowRootPassword := yamlSimpleK8s == nil
-	generatePassword := yamlSimpleK8s == nil
+	generateRootPassword := yamlSimpleK8s == nil
 
 	sr, err := sysroot.New(output)
 	if err != nil {
@@ -333,11 +254,11 @@ func CmdPopulateSysroot(output string) error {
 		return err
 	}
 
-	if err := populateSysrootUsers(output, sr, generatePassword); err != nil {
+	if err := populateSysrootUsers(output, sr, generateRootPassword); err != nil {
 		log.WithFields(log.Fields{
 			"output":           output,
 			"sr":               sr,
-			"generatePassword": generatePassword,
+			"generatePassword": generateRootPassword,
 		}).Error(err)
 		return err
 	}
@@ -359,12 +280,7 @@ func CmdPopulateSysroot(output string) error {
 		return err
 	}
 
-	//TODO: systemd daemon-reload
-
-	// if err := populateSysrootByUsrShareFactory(output); err != nil {
-	// 	log.Error(err)
-	// 	return err
-	// }
+	//TODO: Maybe systemd daemon-reload
 
 	return nil
 }
