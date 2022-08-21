@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Generate systemd units
+// Create and enable systemd units
 func initrdSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
 	log.WithField("start", "initrdSystemdUnits").Debug()
 	defer log.WithField("stop", "initrdSystemdUnits").Debug()
