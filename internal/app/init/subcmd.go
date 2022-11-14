@@ -1,19 +1,21 @@
 package init
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate"
+	"github.com/jlsalvador/simplek8s/internal/pkg/update"
 )
 
 const (
 	SUBCOMMAND_POPULATE string = "populate"
+	SUBCOMMAND_UPDATE   string = "update"
 )
 
 var SUBCOMMANDS = []string{
 	SUBCOMMAND_POPULATE,
+	SUBCOMMAND_UPDATE,
 }
 
 func IsSubcmd(args []string) bool {
@@ -30,12 +32,11 @@ func RunSubCommands(args []string) error {
 
 	switch args[1] {
 	case SUBCOMMAND_POPULATE:
-		cmdPopulate := flag.NewFlagSet(SUBCOMMAND_POPULATE, flag.ExitOnError)
-		cmdPopulateStage := cmdPopulate.String("stage", "", "populate stage, could be initrd or sysroot")
-		cmdPopulateOutput := cmdPopulate.String("output", "", "output directory")
-		cmdPopulate.Parse(args[2:])
-
-		if err := populate.CmdPopulate(*cmdPopulateStage, *cmdPopulateOutput); err != nil {
+		if err := populate.Cmd(args[1:]); err != nil {
+			panic(err)
+		}
+	case SUBCOMMAND_UPDATE:
+		if err := update.Cmd(args[1:]); err != nil {
 			panic(err)
 		}
 	}

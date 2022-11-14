@@ -1,6 +1,7 @@
 package populate
 
 import (
+	"flag"
 	"fmt"
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
@@ -13,6 +14,18 @@ const (
 	STAGE_INITRD  string = "initrd"
 	STAGE_SYSROOT        = "sysroot"
 )
+
+func Cmd(args []string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	cmdPopulate := flag.NewFlagSet("populate", flag.ExitOnError)
+	cmdPopulateStage := cmdPopulate.String("stage", "", "populate stage, could be initrd or sysroot")
+	cmdPopulateOutput := cmdPopulate.String("output", "", "output directory")
+	cmdPopulate.Parse(args)
+
+	return CmdPopulate(*cmdPopulateStage, *cmdPopulateOutput)
+}
 
 func CmdPopulate(stage string, output string) error {
 	log.WithFields(log.Fields{
