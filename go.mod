@@ -10,6 +10,7 @@ require (
 	github.com/openlyinc/pointy v1.2.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/tredoe/osutil v1.0.6
+	github.com/ulikunitz/xz v0.5.10
 	golang.org/x/sys v0.2.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -22,7 +23,6 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pkg/xattr v0.4.9 // indirect
-	github.com/ulikunitz/xz v0.5.10 // indirect
 	golang.org/x/crypto v0.2.0 // indirect
 	gopkg.in/djherbis/times.v1 v1.3.0 // indirect
 )

@@ -3,6 +3,8 @@ package update
 import (
 	"errors"
 	"flag"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -19,22 +21,23 @@ const (
 
 	// Update default flags
 
-	defaultFlagDryrun         = false
-	defaultFlagOutput         = "/boot/simplek8s/"
-	defaultFlagSyslinuxConfig = "/boot/syslinux/syslinux.cfg"
-	defaultFlagVersion        = "latest"
+	defaultFlagComponentForUpdate = "kernel"
+	defaultFlagDryrun             = false
+	defaultFlagOutput             = "/boot/simplek8s/"
+	defaultFlagSyslinuxConfig     = "/boot/syslinux/syslinux.cfg"
+	defaultFlagVersion            = ""
 )
 
 type Flags struct {
 	// Common flags
 
-	Provider              string
 	Architecture          string
-	Distribution          string
+	CheckSignature        bool
 	Component             string
+	Distribution          string
 	FilenameSha256sums    string
 	FilenameSha256sumsGpg string
-	CheckSignature        bool
+	Provider              string
 	Pubring               string
 
 	// Update flags
@@ -85,6 +88,7 @@ func FlagParseList(args []string) (*Flags, error) {
 	flagSetCommon(flagList, fl)
 
 	if err := flagList.Parse(args); err != nil {
+		log.Error(err)
 		return nil, err
 	}
 
@@ -93,6 +97,7 @@ func FlagParseList(args []string) (*Flags, error) {
 
 func FlagParseUpdate(args []string) (*Flags, error) {
 	fl := NewFlags()
+	fl.Component = defaultFlagComponentForUpdate
 
 	// Common flags
 	flagUpdate := flag.NewFlagSet("update", flag.ExitOnError)
@@ -105,6 +110,7 @@ func FlagParseUpdate(args []string) (*Flags, error) {
 	flagUpdate.StringVar(&fl.Version, "version", fl.Version, "Version to download")
 
 	if err := flagUpdate.Parse(args); err != nil {
+		log.Error(err)
 		return nil, err
 	}
 
