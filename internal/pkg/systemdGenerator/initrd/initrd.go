@@ -291,6 +291,16 @@ func initrdYamlMounts(sr *sysroot.Sysroot, generatorDir string) error {
 			}
 			if !found {
 				sr.Files = append(sr.Files, srFile)
+
+				// Enable unit
+				sr.Links = append(sr.Links, sysroot.Link{
+					Overwrite: true,
+					Path:      filepath.Join(generatorDir, "initrd-root-fs.target.requires", filename),
+					Target:    filepath.Join(generatorDir, filename),
+					Uid:       0,
+					Gid:       0,
+					Hard:      false,
+				})
 			}
 		}
 	}
