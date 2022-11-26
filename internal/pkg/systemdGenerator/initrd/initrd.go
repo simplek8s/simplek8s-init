@@ -171,7 +171,7 @@ func initrdSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
 				Before:      []string{"initrd-root-fs.target"},
 				After:       []string{"sysroot-usr.mount"},
 				Type:        "oneshot",
-				ExecStart:   []string{"/usr/lib/simplek8s/init populate --stage initrd --output /sysroot"},
+				ExecStart:   []string{"/usr/lib/simplek8s/init populate -stage=initrd -output=/sysroot"},
 			},
 		},
 		{

@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"errors"
 	"io/fs"
 	"os"
 	"os/user"
@@ -166,4 +167,9 @@ func IsCmdlineDebug() bool {
 		return true
 	}
 	return false
+}
+
+func CheckFileExists(filePath string) bool {
+	_, error := os.Stat(filePath)
+	return !errors.Is(error, os.ErrNotExist)
 }

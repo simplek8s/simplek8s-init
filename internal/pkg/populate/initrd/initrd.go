@@ -9,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-//TODO: Replace this func by systemd tmpfiles.d
+// TODO: Replace this func by systemd tmpfiles.d
 func populateInitrdWithFiles(output string) error {
 	log.WithFields(log.Fields{
 		"start":  "PopulateInitrdWithFiles",
@@ -49,9 +49,11 @@ func populateInitrdWithFiles(output string) error {
 		},
 	} {
 		if err := os.MkdirAll(tbc.dst, 0755); err != nil {
+			log.Error(err)
 			return err
 		}
 		if err := copy.CopyDir(tbc.src, tbc.dst, tbc.opt); err != nil {
+			log.Error(err)
 			return err
 		}
 	}
@@ -59,6 +61,7 @@ func populateInitrdWithFiles(output string) error {
 	// Creates `/usr/local` directory for the future mount point
 	// `/usr` will be Read-Only, so `/usr/local` must be created before.
 	if err := os.MkdirAll(filepath.Join(output, "/usr/local"), 0755); err != nil {
+		log.Error(err)
 		return err
 	}
 	return nil

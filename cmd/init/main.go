@@ -25,10 +25,12 @@ func main() {
 
 	if cmd.IsCmdAlias(os.Args) {
 		if err := cmd.RunCmdAlias(os.Args); err != nil {
+			log.Error(err)
 			panic(err)
 		}
 	} else if cmd.IsSubcmd(os.Args) {
 		if err := cmd.RunSubCommands(os.Args); err != nil {
+			log.Error(err)
 			panic(err)
 		}
 	} else {

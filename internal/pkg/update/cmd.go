@@ -24,6 +24,7 @@ import (
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/godbus/dbus/v5"
 	"github.com/jlsalvador/simplek8s/internal/pkg/checksum"
+	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	log "github.com/sirupsen/logrus"
 	"github.com/ulikunitz/xz"
 )
@@ -218,8 +219,7 @@ func cmdList(fl Flags) error {
 
 	// Print each release
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintln(tw, "Distribution\tArchitecture\tComponent\tVersion")
-	fmt.Fprintln(tw, "------------\t------------\t---------\t-------")
+	fmt.Fprintln(tw, "DISTRIBUTION\tARCHITECTURE\tCOMPONENT\tVERSION")
 	for _, r := range releases {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Distribution, r.Architecture, r.Component, r.Version)
 	}
@@ -358,11 +358,6 @@ func setBootloaderVersionRpi(pathBoot string, relativePathKernel string, relativ
 	return nil
 }
 
-func checkFileExists(filePath string) bool {
-	_, error := os.Stat(filePath)
-	return !errors.Is(error, os.ErrNotExist)
-}
-
 func setBootloaderVersionSyslinux(pathBoot string, relativePathKernel string, relativePathMicrocode string, relativePathSyslinuxConfig string) error {
 	pathSyslinuxConfig := filepath.Join(pathBoot, relativePathSyslinuxConfig)
 
@@ -425,7 +420,7 @@ func setBootloaderVersionSyslinux(pathBoot string, relativePathKernel string, re
 			return err
 		}
 		for _, microcodeFilename := range []string{"intel-ucode.img", "amd-ucode.img"} {
-			if checkFileExists(filepath.Join(pathBoot, relativePathMicrocode, microcodeFilename)) {
+			if common.CheckFileExists(filepath.Join(pathBoot, relativePathMicrocode, microcodeFilename)) {
 				if _, err := fo.WriteString(fmt.Sprintf(" INITRD %s\n", filepath.Join(relativePathMicrocode, microcodeFilename))); err != nil {
 					log.Error(err)
 					return err
@@ -469,9 +464,9 @@ func setBootloaderVersion(pathBoot string, relativePathKernel string, relativePa
 		return setBootloaderVersionRpi(pathBoot, relativePathKernel, relativePathRpiConfig)
 	case bootloaderAuto:
 
-		if checkFileExists(filepath.Join(pathBoot, relativePathRpiConfig)) {
+		if common.CheckFileExists(filepath.Join(pathBoot, relativePathRpiConfig)) {
 			return setBootloaderVersion(pathBoot, relativePathKernel, relativePathMicrocode, bootloaderRpi)
-		} else if checkFileExists(filepath.Join(pathBoot, relativePathSyslinuxConfig)) {
+		} else if common.CheckFileExists(filepath.Join(pathBoot, relativePathSyslinuxConfig)) {
 			return setBootloaderVersion(pathBoot, relativePathKernel, relativePathMicrocode, bootloaderSyslinux)
 		}
 
