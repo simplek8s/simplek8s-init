@@ -4,28 +4,40 @@ import (
 	"errors"
 	"flag"
 
+	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	// Common default flags
 
-	defaultFlagProvider              = "https://simplek8s.jlsalvador.online/simplek8s/stable"
+	defaultFlagArchitecture          = "x86-64"
+	defaultFlagCheckSignature        = true
+	defaultFlagComponent             = "kernel"
+	defaultFlagDistribution          = "simplek8s"
 	defaultFlagFilenameSha256sums    = "SHA256SUMS"
 	defaultFlagFilenameSha256sumsGpg = "SHA256SUMS.gpg"
-	defaultFlagArchitecture          = "x86-64"
-	defaultFlagDistribution          = "simplek8s"
-	defaultFlagComponent             = "kernel"
-	defaultFlagCheckSignature        = true
+	defaultFlagProvider              = "https://simplek8s.jlsalvador.online/simplek8s/stable"
 	defaultFlagPubring               = "/usr/lib/systemd/import-pubring.gpg"
 
 	// Update default flags
 
-	defaultFlagComponentForUpdate = "kernel"
-	defaultFlagDryrun             = false
-	defaultFlagOutput             = "/boot/simplek8s/"
-	defaultFlagSyslinuxConfig     = "/boot/syslinux/syslinux.cfg"
-	defaultFlagVersion            = ""
+	defaultFlagBootloader             = "auto"                   // could be: "syslinux", "rpi", or "auto"
+	defaultFlagBootDevice             = "/dev/disk/by-label/EFI" //TODO On rpi4, the default value must be "/dev/disk/by-label/boot"
+	defaultFlagComponentForUpdate     = "kernel"
+	defaultFlagDryrun                 = false
+	defaultFlagOverwrite              = false
+	defaultFlagRelativeOutput         = "/simplek8s/"
+	defaultFlagRelativeRpiConfig      = "/config.txt"
+	defaultFlagRelativeSyslinuxConfig = "/syslinux/syslinux.cfg"
+	defaultFlagRelativeUCode          = "/"
+	defaultFlagVersion                = ""
+
+	// Enums
+
+	bootloaderAuto     = "auto"
+	bootloaderSyslinux = "syslinux"
+	bootloaderRpi      = "rpi"
 )
 
 type Flags struct {
@@ -42,10 +54,15 @@ type Flags struct {
 
 	// Update flags
 
-	DryRun         bool
-	Output         string
-	SyslinuxConfig string
-	Version        string
+	Bootloader             string
+	BootDevice             string
+	DryRun                 bool
+	Overwrite              bool
+	RelativeOutput         string
+	RelativeRpiConfig      string
+	RelativeSyslinuxConfig string
+	RelativeUCode          string
+	Version                string
 }
 
 // Returns `Flags` with default values
@@ -62,10 +79,15 @@ func NewFlags() *Flags {
 		Pubring:               defaultFlagPubring,
 
 		// Update flags
-		DryRun:         defaultFlagDryrun,
-		Output:         defaultFlagOutput,
-		SyslinuxConfig: defaultFlagSyslinuxConfig,
-		Version:        defaultFlagVersion,
+		Bootloader:             defaultFlagBootloader,
+		BootDevice:             defaultFlagBootDevice,
+		DryRun:                 defaultFlagDryrun,
+		Overwrite:              defaultFlagOverwrite,
+		RelativeOutput:         defaultFlagRelativeOutput,
+		RelativeRpiConfig:      defaultFlagRelativeRpiConfig,
+		RelativeSyslinuxConfig: defaultFlagRelativeSyslinuxConfig,
+		RelativeUCode:          defaultFlagRelativeUCode,
+		Version:                defaultFlagVersion,
 	}
 }
 
@@ -104,9 +126,14 @@ func FlagParseUpdate(args []string) (*Flags, error) {
 	flagSetCommon(flagUpdate, fl)
 
 	// Update flags
+	flagUpdate.StringVar(&fl.Bootloader, "bootloader", fl.Bootloader, `Bootloader type to configure. Could be: "syslinux", "rpi", or "auto"`)
+	flagUpdate.StringVar(&fl.BootDevice, "bootDevice", fl.BootDevice, "Device that contents the necessary to boot")
 	flagUpdate.BoolVar(&fl.DryRun, "dry-run", fl.DryRun, "Do not write anything on disk")
-	flagUpdate.StringVar(&fl.Output, "output", fl.Output, "Directory to install the release")
-	flagUpdate.StringVar(&fl.SyslinuxConfig, "syslinuxConfig", fl.SyslinuxConfig, "Filepath to syslinux.cfg")
+	flagUpdate.StringVar(&fl.RelativeOutput, "output", fl.RelativeOutput, "Relative directory to boot device where to install the release")
+	flagUpdate.BoolVar(&fl.Overwrite, "overwrite", fl.Overwrite, "Overwrite release filename")
+	flagUpdate.StringVar(&fl.RelativeSyslinuxConfig, "syslinuxConfig", fl.RelativeSyslinuxConfig, "Relative filepath to boot device where is the syslinux.cfg")
+	flagUpdate.StringVar(&fl.RelativeRpiConfig, "rpiConfig", fl.RelativeRpiConfig, "Relative filepath to boot device where is the config.cfg")
+	flagUpdate.StringVar(&fl.RelativeUCode, "ucode", fl.RelativeUCode, "Relative directory to boot device where is the CPU microcode")
 	flagUpdate.StringVar(&fl.Version, "version", fl.Version, "Version to download")
 
 	if err := flagUpdate.Parse(args); err != nil {
@@ -115,6 +142,9 @@ func FlagParseUpdate(args []string) (*Flags, error) {
 	}
 
 	// Validate flags
+	if !common.IsStringInList(fl.Bootloader, []string{bootloaderAuto, bootloaderRpi, bootloaderSyslinux}) {
+		return nil, errors.New("unknown bootloader type")
+	}
 	if fl.Distribution == "" {
 		return nil, errors.New("distribution can not be empty")
 	}

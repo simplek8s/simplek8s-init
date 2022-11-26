@@ -3,18 +3,27 @@ package update
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
+	sdbus "github.com/coreos/go-systemd/v22/dbus"
+	"github.com/coreos/go-systemd/v22/unit"
+	"github.com/godbus/dbus/v5"
+	"github.com/jlsalvador/simplek8s/internal/pkg/checksum"
 	log "github.com/sirupsen/logrus"
 	"github.com/ulikunitz/xz"
 )
@@ -195,6 +204,8 @@ func filterReleases(releases []Release, fl Flags) []Release {
 	return newReleases
 }
 
+// TODO Mark current in the list
+// TODO Hide some headers if flags filter are set
 func cmdList(fl Flags) error {
 	bSha256Sums, err := getSha256Sums(fl.Provider, fl.CheckSignature, fl.Pubring)
 	if err != nil {
@@ -207,10 +218,10 @@ func cmdList(fl Flags) error {
 
 	// Print each release
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintln(tw, "Distribution\tArchitecture\tComponent\tVersion\tCompression")
-	fmt.Fprintln(tw, "------------\t------------\t---------\t-------\t-----------")
+	fmt.Fprintln(tw, "Distribution\tArchitecture\tComponent\tVersion")
+	fmt.Fprintln(tw, "------------\t------------\t---------\t-------")
 	for _, r := range releases {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Distribution, r.Architecture, r.Component, r.Version, r.Compression)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Distribution, r.Architecture, r.Component, r.Version)
 	}
 	tw.Flush()
 
@@ -232,8 +243,280 @@ func getReleaseFilename(release Release) string {
 	)
 }
 
-// TODO
+func mountBootPartition(device string) (mountPath string, err error) {
+	timeout := time.Duration(time.Second * 30)
+
+	// Generate unique mount name
+	timestamp := time.Now().Unix()
+	mountPath = "/run/media/root/boot" + strconv.FormatInt(timestamp, 10)
+	unitName := fmt.Sprintf("%s.mount", unit.UnitNamePathEscape(mountPath))
+
+	// Connect to Systemd DBUS
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	conn, err := sdbus.NewSystemdConnectionContext(ctx)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	ch := make(chan string)
+
+	deviceEscaped := unit.UnitNamePathEscape(device)
+	deviceUnitName := fmt.Sprintf("%s.device", deviceEscaped)
+	blockdevUnitName := fmt.Sprintf("blockdev@%s.target", deviceEscaped)
+
+	_, err = conn.StartTransientUnitContext(ctx, unitName, "replace", []sdbus.Property{
+		sdbus.PropDescription(mountPath),
+		sdbus.PropRequires("system.slice", "-.mount", deviceUnitName),
+		sdbus.PropAfter("system.slice", "systemd-journald.socket", "-.mount", deviceUnitName, "local-fs-pre.target", blockdevUnitName),
+		sdbus.PropBefore("local-fs.target", "umount.target"),
+		sdbus.PropConflicts("umount.target"),
+		{Name: "What", Value: dbus.MakeVariant(device)},
+	}, ch)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	result := <-ch
+	if result != "done" {
+		err = fmt.Errorf("starting systemd unit %q got %q", unitName, result)
+		log.Error(err)
+		return
+	}
+
+	return
+}
+
+func setBootloaderVersionRpi(pathBoot string, relativePathKernel string, relativePathRpiConfig string) error {
+	pathRpiConfig := filepath.Join(pathBoot, relativePathRpiConfig)
+
+	fo, err := os.CreateTemp("", "tmp-rpiconfig-*")
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	defer func() {
+		// Remove temporal
+		if err := fo.Close(); err != nil {
+			log.Error(err)
+			//TODO return err
+		}
+		if err := os.Remove(fo.Name()); err != nil {
+			log.Error(err)
+			//TODO return err
+		}
+	}()
+
+	reKernel := regexp.MustCompile(`(?i)^kernel=`)
+
+	fi, err := os.OpenFile(pathRpiConfig, os.O_RDONLY, 0644)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	s := bufio.NewScanner(fi)
+	for i := 0; s.Scan(); i++ {
+		line := s.Text()
+
+		if reKernel.MatchString(line) {
+			if _, err := fo.WriteString(fmt.Sprintf("kernel=%s\n", relativePathKernel)); err != nil {
+				log.Error(err)
+				return err
+			}
+			continue
+		}
+
+		if _, err := fo.WriteString(line + "\n"); err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+	if err := fi.Close(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// Copy from temporal to final
+	if _, err := fo.Seek(0, 0); err != nil {
+		log.Error(err)
+		return err
+	}
+	if f, err := os.OpenFile(pathRpiConfig, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_SYNC, 0644); err != nil {
+		log.Error(err)
+		return err
+	} else if _, err := io.Copy(f, fo); err != nil {
+		log.Error(err)
+		return err
+	} else if err := f.Close(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func checkFileExists(filePath string) bool {
+	_, error := os.Stat(filePath)
+	return !errors.Is(error, os.ErrNotExist)
+}
+
+func setBootloaderVersionSyslinux(pathBoot string, relativePathKernel string, relativePathMicrocode string, relativePathSyslinuxConfig string) error {
+	pathSyslinuxConfig := filepath.Join(pathBoot, relativePathSyslinuxConfig)
+
+	fo, err := os.CreateTemp("", "tmp-syslinux-*")
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	defer func() {
+		// Remove temporal
+		if err := fo.Close(); err != nil {
+			log.Error(err)
+			//TODO return err
+		}
+		if err := os.Remove(fo.Name()); err != nil {
+			log.Error(err)
+			//TODO return err
+		}
+	}()
+
+	reDefault := regexp.MustCompile(`(?i)^DEFAULT `)
+	kernelName := strings.TrimSuffix(path.Base(relativePathKernel), ".kernel")
+	reLabel := regexp.MustCompile(`(?i)^LABEL ` + strings.ReplaceAll(kernelName, `.`, `\.`))
+
+	fi, err := os.OpenFile(pathSyslinuxConfig, os.O_RDONLY, 0644)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	foundLabel := false
+	s := bufio.NewScanner(fi)
+	for i := 0; s.Scan(); i++ {
+		line := s.Text()
+
+		if reDefault.MatchString(line) {
+			if _, err := fo.WriteString(fmt.Sprintf("DEFAULT %s\n", kernelName)); err != nil {
+				log.Error(err)
+				return err
+			}
+			continue
+		}
+
+		if reLabel.MatchString(line) {
+			foundLabel = true
+		}
+
+		if _, err := fo.WriteString(line + "\n"); err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+	if err := fi.Close(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	if !foundLabel {
+		if _, err := fo.WriteString(fmt.Sprintf("LABEL %s\n KERNEL %s\n", kernelName, relativePathKernel)); err != nil {
+			log.Error(err)
+			return err
+		}
+		for _, microcodeFilename := range []string{"intel-ucode.img", "amd-ucode.img"} {
+			if checkFileExists(filepath.Join(pathBoot, relativePathMicrocode, microcodeFilename)) {
+				if _, err := fo.WriteString(fmt.Sprintf(" INITRD %s\n", filepath.Join(relativePathMicrocode, microcodeFilename))); err != nil {
+					log.Error(err)
+					return err
+				}
+			}
+		}
+		if _, err := fo.WriteString("\n"); err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+
+	// Copy from temporal to final
+	if _, err := fo.Seek(0, 0); err != nil {
+		log.Error(err)
+		return err
+	}
+	if f, err := os.OpenFile(pathSyslinuxConfig, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_SYNC, 0644); err != nil {
+		log.Error(err)
+		return err
+	} else if _, err := io.Copy(f, fo); err != nil {
+		log.Error(err)
+		return err
+	} else if err := f.Close(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+// Detect bootloaders and set version to boot
+func setBootloaderVersion(pathBoot string, relativePathKernel string, relativePathMicrocode string, bootloader string) error {
+	relativePathRpiConfig := "/config.txt"
+	relativePathSyslinuxConfig := "/syslinux/syslinux.cfg"
+
+	switch bootloader {
+	case bootloaderSyslinux:
+		return setBootloaderVersionSyslinux(pathBoot, relativePathKernel, relativePathMicrocode, relativePathSyslinuxConfig)
+	case bootloaderRpi:
+		return setBootloaderVersionRpi(pathBoot, relativePathKernel, relativePathRpiConfig)
+	case bootloaderAuto:
+
+		if checkFileExists(filepath.Join(pathBoot, relativePathRpiConfig)) {
+			return setBootloaderVersion(pathBoot, relativePathKernel, relativePathMicrocode, bootloaderRpi)
+		} else if checkFileExists(filepath.Join(pathBoot, relativePathSyslinuxConfig)) {
+			return setBootloaderVersion(pathBoot, relativePathKernel, relativePathMicrocode, bootloaderSyslinux)
+		}
+
+		fallthrough
+	default:
+		err := errors.New("unknown bootloader")
+		return err
+	}
+}
+
+func umountBootPartition(mountPath string) error {
+	timeout := time.Duration(time.Second * 30)
+	unitName := fmt.Sprintf("%s.mount", unit.UnitNamePathEscape(mountPath))
+
+	// Connect to Systemd DBUS
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	conn, err := sdbus.NewSystemdConnectionContext(ctx)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	defer conn.Close()
+
+	ch := make(chan string)
+	if _, err := conn.StopUnitContext(ctx, unitName, "fail", ch); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	result := <-ch
+	if result != "done" {
+		err = fmt.Errorf("stopping systemd unit %q got %q", unitName, result)
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
 func cmdUpdate(fl Flags) error {
+	//TODO DryRun
+	//TODO Overwrite
+
 	bSha256Sums, err := getSha256Sums(fl.Provider, fl.CheckSignature, fl.Pubring)
 	if err != nil {
 		log.Error(err)
@@ -252,34 +535,92 @@ func cmdUpdate(fl Flags) error {
 	}
 	defer bRelease.Close()
 
-	//TODO Validate SHA256
+	// Validate SHA256
+	buf := bytes.Buffer{}
+	r := io.TeeReader(bRelease, &buf)
+	fmt.Println("Downloading and verifying ...")
+	hash, err := checksum.Sha256sum(r)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	if hash != lastVersion.Checksum {
+		err := fmt.Errorf("checksum invalid. got: %q, want: %q", hash, lastVersion.Checksum)
+		log.Error(err)
+		return err
+	}
+	fmt.Println("Checksum is valid.")
 
-	//TODO Write release into output
-	if lastVersion.Compression == "xz" {
-		r, err := xz.NewReader(bRelease)
+	// Mount the "boot" partition as RW
+	fmt.Println("Mounting boot device ...")
+	pathMount, err := mountBootPartition(fl.BootDevice)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	defer func() {
+		// Unmount "boot" partition if it is necessary
+		fmt.Println("Unmounting boot device ...")
+		if err := umountBootPartition(pathMount); err != nil {
+			log.Error(err)
+			//TODO return err
+		}
+		if err := os.Remove(pathMount); err != nil {
+			log.Error(err)
+			//TODO return err
+		}
+	}()
+
+	// Detect compression
+	var releaseNameWithoutCompressionExtension string
+	var lastVersionReader io.Reader
+	switch lastVersion.Compression {
+	case "xz": // XZ
+		lastVersionReader, err = xz.NewReader(&buf)
 		if err != nil {
 			log.Error(err)
 			return err
 		}
-		releaseNameWithoutCompressionExtension := strings.TrimRight(releaseName, ".xz")
-		output := filepath.Join(fl.Output, releaseNameWithoutCompressionExtension)
-
-		fmt.Printf("Writing into %q ...\n", output)
-
-		dst, err := os.Create(output)
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(dst, r); err != nil {
-			return err
-		}
-	} else {
-		err := fmt.Errorf("unknown compresssion %q", lastVersion.Compression)
+		releaseNameWithoutCompressionExtension = strings.TrimRight(releaseName, ".xz")
+	case "": // None
+		lastVersionReader = &buf
+		releaseNameWithoutCompressionExtension = releaseName
+	default:
+		err := fmt.Errorf("unknown compression %q", lastVersion.Compression)
 		log.Error(err)
 		return err
 	}
 
-	//TODO Bootloader
+	// Write release
+
+	pathKernel := filepath.Join(pathMount, fl.RelativeOutput, releaseNameWithoutCompressionExtension)
+
+	// Create the destination directory
+	dir := filepath.Join(pathMount, fl.RelativeOutput)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// Copy the temporal file to the final destination
+	fmt.Printf("Writing into %q ...\n", pathKernel)
+	if dst, err := os.OpenFile(pathKernel, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_SYNC, 0644); err != nil {
+		log.Error(err)
+		return err
+	} else if _, err := io.Copy(dst, lastVersionReader); err != nil {
+		log.Error(err)
+		return err
+	} else if err := dst.Close(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// Bootloader
+	fmt.Println("Configuring bootloader ...")
+	if err := setBootloaderVersion(pathMount, filepath.Join(fl.RelativeOutput, releaseNameWithoutCompressionExtension), fl.RelativeUCode, fl.Bootloader); err != nil {
+		log.Error(err)
+		return err
+	}
 
 	return nil
 }
