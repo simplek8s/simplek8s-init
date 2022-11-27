@@ -99,7 +99,7 @@ func flagSetCommon(flagSet *flag.FlagSet, fl *Flags) error {
 	flagSet.StringVar(&fl.Provider, "provider", fl.Provider, "Use a custom provider for updates")
 	flagSet.StringVar(&fl.FilenameSha256sums, "filename-sha256sums", fl.FilenameSha256sums, "Filename with the checksums")
 	flagSet.StringVar(&fl.FilenameSha256sumsGpg, "filename-sha256sums-gpg", fl.FilenameSha256sumsGpg, "Filename with the checksums PGP signature")
-	flagSet.StringVar(&fl.Architecture, "architecture", fl.Architecture, `Platform architecture. Could be "auto", "x86-64" or "arm64"`)
+	flagSet.StringVar(&fl.Architecture, "architecture", fl.Architecture, `Platform architecture. Could be: "auto", "x86-64" or "arm64"`)
 	flagSet.StringVar(&fl.Distribution, "distribution", fl.Distribution, "Distribution")
 	flagSet.StringVar(&fl.Component, "component", fl.Component, "Component")
 	flagSet.BoolVar(&fl.CheckSignature, "check-signature", fl.CheckSignature, "Check SHA256SUMS PGP signature")

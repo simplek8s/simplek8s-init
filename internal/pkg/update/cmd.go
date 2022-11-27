@@ -51,6 +51,12 @@ func cmdCurrent(fl Flags) error {
 
 // Fetch a HTTP resource and returns its ReadCloser interface.
 func httpGetFile(u ...string) (io.ReadCloser, error) {
+	log.WithFields(log.Fields{
+		"start": "httpGetFile",
+		"u":     u,
+	}).Debug()
+	defer log.WithField("end", "httpGetFile").Debug()
+
 	var endpoint string
 	var err error
 	if len(u) > 1 {
@@ -90,6 +96,14 @@ func httpGetFile(u ...string) (io.ReadCloser, error) {
 //   - checkSignature = true
 //   - pubring = "/usr/lib/systemd/import-pubring.gpg"
 func getSha256Sums(provider string, checkSignature bool, pubring string) ([]byte, error) {
+	log.WithFields(log.Fields{
+		"start":          "getSha256Sums",
+		"provider":       provider,
+		"checkSignature": checkSignature,
+		"pubring":        pubring,
+	}).Debug()
+	defer log.WithField("end", "getSha256Sums").Debug()
+
 	Sha256sums, err := httpGetFile(provider, "SHA256SUMS")
 	if err != nil {
 		log.Error(err)
@@ -143,8 +157,18 @@ func getSha256Sums(provider string, checkSignature bool, pubring string) ([]byte
 			log.Error(err)
 			return nil, err
 		}
-		if _, err := openpgp.CheckArmoredDetachedSignature(el, bytes.NewReader(bSha256Sums), bytes.NewReader(bSha256SumsGpg), nil); err != nil {
-			if _, err = openpgp.CheckDetachedSignature(el, bytes.NewReader(bSha256Sums), bytes.NewReader(bSha256SumsGpg), nil); err != nil {
+		if _, err := openpgp.CheckArmoredDetachedSignature(
+			el,
+			bytes.NewReader(bSha256Sums),
+			bytes.NewReader(bSha256SumsGpg),
+			nil,
+		); err != nil {
+			if _, err = openpgp.CheckDetachedSignature(
+				el,
+				bytes.NewReader(bSha256Sums),
+				bytes.NewReader(bSha256SumsGpg),
+				nil,
+			); err != nil {
 				log.Error(err)
 				return nil, err
 			}
@@ -155,6 +179,12 @@ func getSha256Sums(provider string, checkSignature bool, pubring string) ([]byte
 }
 
 func parseReleasesFromSha256Sums(bSha256Sums []byte) []Release {
+	log.WithFields(log.Fields{
+		"start":       "parseReleasesFromSha256Sums",
+		"bSha256Sums": bSha256Sums,
+	}).Debug()
+	defer log.WithField("end", "parseReleasesFromSha256Sums").Debug()
+
 	releases := []Release{}
 	re := regexp.MustCompile(`(?P<checksum>\w+)\s+\*?(?P<distribution>[-_\w]+)\.(?P<version>[-_\w]+)\.(?P<architecture>[-_\w]+)(\.(?P<component>\w+))?(\.(?P<compression>\w+))?`)
 	bs := bufio.NewScanner(bytes.NewReader(bSha256Sums))
@@ -187,6 +217,13 @@ func parseReleasesFromSha256Sums(bSha256Sums []byte) []Release {
 }
 
 func filterReleases(releases []Release, fl Flags) []Release {
+	log.WithFields(log.Fields{
+		"start":    "filterReleases",
+		"releases": releases,
+		"fl":       fl,
+	}).Debug()
+	defer log.WithField("end", "filterReleases").Debug()
+
 	newReleases := []Release{}
 	for i := range releases {
 		if (len(fl.Architecture) > 0 && fl.Architecture != releases[i].Architecture) ||
@@ -208,6 +245,12 @@ func filterReleases(releases []Release, fl Flags) []Release {
 // TODO Mark current in the list
 // TODO Hide some headers if flags filter are set
 func cmdList(fl Flags) error {
+	log.WithFields(log.Fields{
+		"start": "cmdList",
+		"fl":    fl,
+	}).Debug()
+	defer log.WithField("end", "cmdList").Debug()
+
 	bSha256Sums, err := getSha256Sums(fl.Provider, fl.CheckSignature, fl.Pubring)
 	if err != nil {
 		log.Error(err)
@@ -244,6 +287,12 @@ func getReleaseFilename(release Release) string {
 }
 
 func mountBootPartition(device string) (mountPath string, err error) {
+	log.WithFields(log.Fields{
+		"start":  "mountBootPartition",
+		"device": device,
+	}).Debug()
+	defer log.WithField("end", "mountBootPartition").Debug()
+
 	timeout := time.Duration(time.Second * 30)
 
 	// Generate unique mount name
@@ -290,7 +339,19 @@ func mountBootPartition(device string) (mountPath string, err error) {
 	return
 }
 
-func setBootloaderVersionRpi(pathBoot string, relativePathKernel string, relativePathRpiConfig string) error {
+func setBootloaderVersionRpi(
+	pathBoot string,
+	relativePathKernel string,
+	relativePathRpiConfig string,
+) error {
+	log.WithFields(log.Fields{
+		"start":                 "setBootloaderVersionRpi",
+		"pathBoot":              pathBoot,
+		"relativePathKernel":    relativePathKernel,
+		"relativePathRpiConfig": relativePathRpiConfig,
+	}).Debug()
+	defer log.WithField("end", "setBootloaderVersionRpi").Debug()
+
 	pathRpiConfig := filepath.Join(pathBoot, relativePathRpiConfig)
 
 	fo, err := os.CreateTemp("", "tmp-rpiconfig-*")
@@ -344,7 +405,11 @@ func setBootloaderVersionRpi(pathBoot string, relativePathKernel string, relativ
 		log.Error(err)
 		return err
 	}
-	if f, err := os.OpenFile(pathRpiConfig, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_SYNC, 0644); err != nil {
+	if f, err := os.OpenFile(
+		pathRpiConfig,
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_SYNC,
+		0644,
+	); err != nil {
 		log.Error(err)
 		return err
 	} else if _, err := io.Copy(f, fo); err != nil {
@@ -358,7 +423,21 @@ func setBootloaderVersionRpi(pathBoot string, relativePathKernel string, relativ
 	return nil
 }
 
-func setBootloaderVersionSyslinux(pathBoot string, relativePathKernel string, relativePathMicrocode string, relativePathSyslinuxConfig string) error {
+func setBootloaderVersionSyslinux(
+	pathBoot string,
+	relativePathKernel string,
+	relativePathMicrocode string,
+	relativePathSyslinuxConfig string,
+) error {
+	log.WithFields(log.Fields{
+		"start":                      "setBootloaderVersionSyslinux",
+		"pathBoot":                   pathBoot,
+		"relativePathKernel":         relativePathKernel,
+		"relativePathMicrocode":      relativePathMicrocode,
+		"relativePathSyslinuxConfig": relativePathSyslinuxConfig,
+	}).Debug()
+	defer log.WithField("end", "setBootloaderVersionSyslinux").Debug()
+
 	pathSyslinuxConfig := filepath.Join(pathBoot, relativePathSyslinuxConfig)
 
 	fo, err := os.CreateTemp("", "tmp-syslinux-*")
@@ -438,7 +517,11 @@ func setBootloaderVersionSyslinux(pathBoot string, relativePathKernel string, re
 		log.Error(err)
 		return err
 	}
-	if f, err := os.OpenFile(pathSyslinuxConfig, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_SYNC, 0644); err != nil {
+	if f, err := os.OpenFile(
+		pathSyslinuxConfig,
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_SYNC,
+		0644,
+	); err != nil {
 		log.Error(err)
 		return err
 	} else if _, err := io.Copy(f, fo); err != nil {
@@ -453,23 +536,54 @@ func setBootloaderVersionSyslinux(pathBoot string, relativePathKernel string, re
 }
 
 // Detect bootloaders and set version to boot
-func setBootloaderVersion(pathBoot string, relativePathKernel string, relativePathMicrocode string, bootloader string) error {
+func setBootloaderVersion(
+	pathBoot string,
+	relativePathKernel string,
+	relativePathMicrocode string,
+	bootloader string,
+) error {
+	log.WithFields(log.Fields{
+		"start":                 "setBootloaderVersion",
+		"pathBoot":              pathBoot,
+		"relativePathKernel":    relativePathKernel,
+		"relativePathMicrocode": relativePathMicrocode,
+		"bootloader":            bootloader,
+	}).Debug()
+	defer log.WithField("end", "setBootloaderVersion").Debug()
+
 	relativePathRpiConfig := "/config.txt"
 	relativePathSyslinuxConfig := "/syslinux/syslinux.cfg"
 
 	switch bootloader {
 	case bootloaderSyslinux:
-		return setBootloaderVersionSyslinux(pathBoot, relativePathKernel, relativePathMicrocode, relativePathSyslinuxConfig)
+		return setBootloaderVersionSyslinux(
+			pathBoot,
+			relativePathKernel,
+			relativePathMicrocode,
+			relativePathSyslinuxConfig,
+		)
 	case bootloaderRpi:
-		return setBootloaderVersionRpi(pathBoot, relativePathKernel, relativePathRpiConfig)
+		return setBootloaderVersionRpi(
+			pathBoot,
+			relativePathKernel,
+			relativePathRpiConfig,
+		)
 	case bootloaderAuto:
-
 		if common.CheckFileExists(filepath.Join(pathBoot, relativePathRpiConfig)) {
-			return setBootloaderVersion(pathBoot, relativePathKernel, relativePathMicrocode, bootloaderRpi)
+			return setBootloaderVersion(
+				pathBoot,
+				relativePathKernel,
+				relativePathMicrocode,
+				bootloaderRpi,
+			)
 		} else if common.CheckFileExists(filepath.Join(pathBoot, relativePathSyslinuxConfig)) {
-			return setBootloaderVersion(pathBoot, relativePathKernel, relativePathMicrocode, bootloaderSyslinux)
+			return setBootloaderVersion(
+				pathBoot,
+				relativePathKernel,
+				relativePathMicrocode,
+				bootloaderSyslinux,
+			)
 		}
-
 		fallthrough
 	default:
 		err := errors.New("unknown bootloader")
@@ -478,6 +592,12 @@ func setBootloaderVersion(pathBoot string, relativePathKernel string, relativePa
 }
 
 func umountBootPartition(mountPath string) error {
+	log.WithFields(log.Fields{
+		"start":     "umountBootPartition",
+		"mountPath": mountPath,
+	}).Debug()
+	defer log.WithField("end", "umountBootPartition").Debug()
+
 	timeout := time.Duration(time.Second * 30)
 	unitName := fmt.Sprintf("%s.mount", unit.UnitNamePathEscape(mountPath))
 
@@ -509,6 +629,12 @@ func umountBootPartition(mountPath string) error {
 }
 
 func cmdUpdate(fl Flags) error {
+	log.WithFields(log.Fields{
+		"start": "cmdUpdate",
+		"fl":    fl,
+	}).Debug()
+	defer log.WithField("end", "cmdUpdate").Debug()
+
 	//TODO DryRun
 	//TODO Overwrite
 
@@ -588,7 +714,11 @@ func cmdUpdate(fl Flags) error {
 
 	// Write release
 
-	pathKernel := filepath.Join(pathMount, fl.RelativeOutput, releaseNameWithoutCompressionExtension)
+	pathKernel := filepath.Join(
+		pathMount,
+		fl.RelativeOutput,
+		releaseNameWithoutCompressionExtension,
+	)
 
 	// Create the destination directory
 	dir := filepath.Join(pathMount, fl.RelativeOutput)
@@ -599,7 +729,11 @@ func cmdUpdate(fl Flags) error {
 
 	// Copy the temporal file to the final destination
 	fmt.Printf("Writing into %q ...\n", pathKernel)
-	if dst, err := os.OpenFile(pathKernel, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_SYNC, 0644); err != nil {
+	if dst, err := os.OpenFile(
+		pathKernel,
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_SYNC,
+		0644,
+	); err != nil {
 		log.Error(err)
 		return err
 	} else if _, err := io.Copy(dst, lastVersionReader); err != nil {
@@ -612,7 +746,12 @@ func cmdUpdate(fl Flags) error {
 
 	// Bootloader
 	fmt.Println("Configuring bootloader ...")
-	if err := setBootloaderVersion(pathMount, filepath.Join(fl.RelativeOutput, releaseNameWithoutCompressionExtension), fl.RelativeUCode, fl.Bootloader); err != nil {
+	if err := setBootloaderVersion(
+		pathMount,
+		filepath.Join(fl.RelativeOutput, releaseNameWithoutCompressionExtension),
+		fl.RelativeUCode,
+		fl.Bootloader,
+	); err != nil {
 		log.Error(err)
 		return err
 	}
@@ -621,8 +760,11 @@ func cmdUpdate(fl Flags) error {
 }
 
 func Cmd(args []string) error {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.WithFields(log.Fields{
+		"start": "Cmd",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "Cmd").Debug()
 
 	//TODO: Show help
 	if len(args) > 1 {
