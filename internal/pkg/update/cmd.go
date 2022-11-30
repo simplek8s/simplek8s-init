@@ -809,6 +809,12 @@ func cmdUpdate(fl Flags) error {
 	return nil
 }
 
+// TODO showHelp()
+func showHelp() {
+	log.WithField("start", "showHelp").Debug()
+	defer log.WithField("end", "showHelp").Debug()
+}
+
 func Cmd(args []string) error {
 	log.WithFields(log.Fields{
 		"start": "Cmd",
@@ -816,40 +822,44 @@ func Cmd(args []string) error {
 	}).Debug()
 	defer log.WithField("end", "Cmd").Debug()
 
-	//TODO: Show help
-	if len(args) > 1 {
-		switch args[1] {
-		case SUBCMD_LIST:
-			fl, err := FlagParseList(args[2:])
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			if err := cmdList(*fl); err != nil {
-				log.Error(err)
-				return err
-			}
-		case SUBCMD_UPDATE:
-			fl, err := FlagParseUpdate(args[2:])
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			if err := cmdUpdate(*fl); err != nil {
-				log.Error(err)
-				return err
-			}
-		case SUBCMD_CURRENT:
-			fl, err := FlagParseCurrent(args[2:])
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			if err := cmdCurrent(*fl); err != nil {
-				log.Error(err)
-				return err
-			}
+	if len(args) == 0 {
+		showHelp()
+		return nil
+	}
+
+	switch args[0] {
+	case SUBCMD_LIST:
+		fl, err := FlagParseList(args[1:])
+		if err != nil {
+			log.Error(err)
+			return err
 		}
+		if err := cmdList(*fl); err != nil {
+			log.Error(err)
+			return err
+		}
+	case SUBCMD_UPDATE:
+		fl, err := FlagParseUpdate(args[1:])
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		if err := cmdUpdate(*fl); err != nil {
+			log.Error(err)
+			return err
+		}
+	case SUBCMD_CURRENT:
+		fl, err := FlagParseCurrent(args[1:])
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		if err := cmdCurrent(*fl); err != nil {
+			log.Error(err)
+			return err
+		}
+	default:
+		showHelp()
 	}
 	return nil
 }

@@ -95,15 +95,15 @@ func NewFlags() *Flags {
 	}
 }
 
-func flagSetCommon(flagSet *flag.FlagSet, fl *Flags) error {
-	flagSet.StringVar(&fl.Provider, "provider", fl.Provider, "Use a custom provider for updates")
-	flagSet.StringVar(&fl.FilenameSha256sums, "filename-sha256sums", fl.FilenameSha256sums, "Filename with the checksums")
-	flagSet.StringVar(&fl.FilenameSha256sumsGpg, "filename-sha256sums-gpg", fl.FilenameSha256sumsGpg, "Filename with the checksums PGP signature")
-	flagSet.StringVar(&fl.Architecture, "architecture", fl.Architecture, `Platform architecture. Could be: "auto", "x86-64" or "arm64"`)
-	flagSet.StringVar(&fl.Distribution, "distribution", fl.Distribution, "Distribution")
-	flagSet.StringVar(&fl.Component, "component", fl.Component, "Component")
-	flagSet.BoolVar(&fl.CheckSignature, "check-signature", fl.CheckSignature, "Check SHA256SUMS PGP signature")
-	flagSet.StringVar(&fl.Pubring, "pubring", fl.Pubring, "Pubring to validate SHA256SUMS PGP signature")
+func flagSetCommon(fl *Flags) error {
+	flag.CommandLine.StringVar(&fl.Provider, "provider", fl.Provider, "Use a custom provider for updates")
+	flag.CommandLine.StringVar(&fl.FilenameSha256sums, "filename-sha256sums", fl.FilenameSha256sums, "Filename with the checksums")
+	flag.CommandLine.StringVar(&fl.FilenameSha256sumsGpg, "filename-sha256sums-gpg", fl.FilenameSha256sumsGpg, "Filename with the checksums PGP signature")
+	flag.CommandLine.StringVar(&fl.Architecture, "architecture", fl.Architecture, `Platform architecture. Could be: "auto", "x86-64" or "arm64"`)
+	flag.CommandLine.StringVar(&fl.Distribution, "distribution", fl.Distribution, "Distribution")
+	flag.CommandLine.StringVar(&fl.Component, "component", fl.Component, "Component")
+	flag.CommandLine.BoolVar(&fl.CheckSignature, "check-signature", fl.CheckSignature, "Check SHA256SUMS PGP signature")
+	flag.CommandLine.StringVar(&fl.Pubring, "pubring", fl.Pubring, "Pubring to validate SHA256SUMS PGP signature")
 
 	// Compute flags values
 	if fl.Architecture == "auto" {
@@ -132,14 +132,13 @@ func FlagParseList(args []string) (*Flags, error) {
 	fl := NewFlags()
 
 	// Common flags
-	flagList := flag.NewFlagSet("list", flag.ExitOnError)
-	if err := flagSetCommon(flagList, fl); err != nil {
+	if err := flagSetCommon(fl); err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
 	// List flags
-	if err := flagList.Parse(args); err != nil {
+	if err := flag.CommandLine.Parse(args); err != nil {
 		log.Error(err)
 		return nil, err
 	}
@@ -158,23 +157,22 @@ func FlagParseUpdate(args []string) (*Flags, error) {
 	fl.Component = defaultFlagComponentForUpdate
 
 	// Common flags
-	flagUpdate := flag.NewFlagSet("update", flag.ExitOnError)
-	if err := flagSetCommon(flagUpdate, fl); err != nil {
+	if err := flagSetCommon(fl); err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
 	// Update flags
-	flagUpdate.StringVar(&fl.Bootloader, "bootloader", fl.Bootloader, `Bootloader type to configure. Could be: "syslinux", "rpi", or "auto"`)
-	flagUpdate.StringVar(&fl.BootDevice, "bootDevice", fl.BootDevice, "Device that contents the necessary to boot")
-	flagUpdate.BoolVar(&fl.DryRun, "dry-run", fl.DryRun, "Do not write anything on disk")
-	flagUpdate.StringVar(&fl.RelativeOutput, "output", fl.RelativeOutput, "Relative directory to boot device where to install the release")
-	flagUpdate.BoolVar(&fl.Overwrite, "overwrite", fl.Overwrite, "Overwrite release filename")
-	flagUpdate.StringVar(&fl.RelativeSyslinuxConfig, "syslinuxConfig", fl.RelativeSyslinuxConfig, "Relative filepath to boot device where is the syslinux.cfg")
-	flagUpdate.StringVar(&fl.RelativeRpiConfig, "rpiConfig", fl.RelativeRpiConfig, "Relative filepath to boot device where is the config.cfg")
-	flagUpdate.StringVar(&fl.RelativeUCode, "ucode", fl.RelativeUCode, "Relative directory to boot device where is the CPU microcode")
-	flagUpdate.StringVar(&fl.Version, "version", fl.Version, "Version to download")
-	if err := flagUpdate.Parse(args); err != nil {
+	flag.CommandLine.StringVar(&fl.Bootloader, "bootloader", fl.Bootloader, `Bootloader type to configure. Could be: "syslinux", "rpi", or "auto"`)
+	flag.CommandLine.StringVar(&fl.BootDevice, "bootDevice", fl.BootDevice, "Device that contents the necessary to boot")
+	flag.CommandLine.BoolVar(&fl.DryRun, "dry-run", fl.DryRun, "Do not write anything on disk")
+	flag.CommandLine.StringVar(&fl.RelativeOutput, "output", fl.RelativeOutput, "Relative directory to boot device where to install the release")
+	flag.CommandLine.BoolVar(&fl.Overwrite, "overwrite", fl.Overwrite, "Overwrite release filename")
+	flag.CommandLine.StringVar(&fl.RelativeSyslinuxConfig, "syslinuxConfig", fl.RelativeSyslinuxConfig, "Relative filepath to boot device where is the syslinux.cfg")
+	flag.CommandLine.StringVar(&fl.RelativeRpiConfig, "rpiConfig", fl.RelativeRpiConfig, "Relative filepath to boot device where is the config.cfg")
+	flag.CommandLine.StringVar(&fl.RelativeUCode, "ucode", fl.RelativeUCode, "Relative directory to boot device where is the CPU microcode")
+	flag.CommandLine.StringVar(&fl.Version, "version", fl.Version, "Version to download")
+	if err := flag.CommandLine.Parse(args); err != nil {
 		log.Error(err)
 		return nil, err
 	}

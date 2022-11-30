@@ -1,6 +1,7 @@
 package init
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
@@ -14,11 +15,6 @@ const (
 	CMDALIAS_UPDATE    string = "simplek8s-update"
 )
 
-var CMDALIAS = []string{
-	CMDALIAS_GENERATOR,
-	CMDALIAS_UPDATE,
-}
-
 func IsCmdAlias(args []string) bool {
 	if len(args) < 1 {
 		return false
@@ -26,34 +22,31 @@ func IsCmdAlias(args []string) bool {
 
 	fullPathFilename := args[0]
 	got := filepath.Base(fullPathFilename)
-	return common.IsStringInList(got, CMDALIAS)
+	return common.IsStringInList(got, []string{
+		CMDALIAS_GENERATOR,
+		CMDALIAS_UPDATE,
+	})
 }
 
 func isCmdAliasSystemdGenerator(args []string) bool {
-	// Validate args[1:]
-	// [0] own cmd
-	// [1] normal dir
-	// [2] early dir
-	// [3] late dir
+	// args[0] own cmd
+	// args[1] normal dirpath
+	// args[2] early dirpath
+	// args[3] late dirpath
 	if len(args) != 4 {
 		return false
 	}
 
-	// Validate cmdname at args[0]
 	fullPathFilename := args[0]
 	got := filepath.Base(fullPathFilename)
 	want := CMDALIAS_GENERATOR
-	if got != want {
-		return false
-	}
 
-	//TODO: Validate directories
-
-	return true
+	return got == want && // Validate cmdname at args[0]
+		common.IsDir(args[1]) && common.IsDir(args[2]) && common.IsDir(args[3]) // Validate directories
 }
 
 func isCmdAliasUpdate(args []string) bool {
-	// [0] own cmd
+	// args[0] own cmd
 	if len(args) < 1 {
 		return false
 	}
@@ -61,20 +54,19 @@ func isCmdAliasUpdate(args []string) bool {
 	fullPathFilename := args[0]
 	got := filepath.Base(fullPathFilename)
 	want := CMDALIAS_UPDATE
-	if got != want {
-		return false
-	}
-
-	return true
+	return got == want
 }
 
 func cmdAliasSystemdGenerator(args []string) error {
 	log.WithFields(log.Fields{
-		"args": args,
-	}).Debug("cmdAliasSystemdGenerator")
-	normalDir := args[1]
-	earlyDir := args[2]
-	lateDir := args[3]
+		"start": "cmdAliasSystemdGenerator",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "cmdAliasSystemdGenerator").Debug()
+
+	normalDir := args[0]
+	earlyDir := args[1]
+	lateDir := args[2]
 
 	if err := systemdGenerator.CmdSystemdGenerator(normalDir, earlyDir, lateDir); err != nil {
 		return err
@@ -83,15 +75,30 @@ func cmdAliasSystemdGenerator(args []string) error {
 }
 
 func cmdAliasUpdate(args []string) error {
+	log.WithFields(log.Fields{
+		"start": "cmdAliasUpdate",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "cmdAliasUpdate").Debug()
+
 	return update.Cmd(args)
 }
 
 func RunCmdAlias(args []string) error {
+	log.WithFields(log.Fields{
+		"start": "RunCmdAlias",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "RunCmdAlias").Debug()
+
 	switch {
 	case isCmdAliasSystemdGenerator(args):
-		return cmdAliasSystemdGenerator(args)
+		return cmdAliasSystemdGenerator(args[1:])
 	case isCmdAliasUpdate(args):
-		return cmdAliasUpdate(args)
+		return cmdAliasUpdate(args[1:])
+	default:
+		err := fmt.Errorf("unknown alias: %q", args)
+		log.Error(err)
+		return err
 	}
-	return nil
 }
