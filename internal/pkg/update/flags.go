@@ -123,6 +123,12 @@ func flagSetCommon(flagSet *flag.FlagSet, fl *Flags) error {
 }
 
 func FlagParseList(args []string) (*Flags, error) {
+	log.WithFields(log.Fields{
+		"start": "FlagParseList",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "FlagParseList").Debug()
+
 	fl := NewFlags()
 
 	// Common flags
@@ -142,6 +148,12 @@ func FlagParseList(args []string) (*Flags, error) {
 }
 
 func FlagParseUpdate(args []string) (*Flags, error) {
+	log.WithFields(log.Fields{
+		"start": "FlagParseUpdate",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "FlagParseUpdate").Debug()
+
 	fl := NewFlags()
 	fl.Component = defaultFlagComponentForUpdate
 
@@ -206,6 +218,12 @@ func FlagParseUpdate(args []string) (*Flags, error) {
 }
 
 func FlagParseCurrent(args []string) (*Flags, error) {
+	log.WithFields(log.Fields{
+		"start": "FlagParseCurrent",
+		"args":  args,
+	}).Debug()
+	defer log.WithField("end", "FlagParseCurrent").Debug()
+
 	fl := NewFlags()
 	return fl, nil
 }

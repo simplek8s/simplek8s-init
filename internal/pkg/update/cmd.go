@@ -27,6 +27,7 @@ import (
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	log "github.com/sirupsen/logrus"
 	"github.com/ulikunitz/xz"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -42,6 +43,7 @@ type Release struct {
 	Architecture string
 	Component    string
 	Compression  string
+	Status       string
 }
 
 // TODO
@@ -242,6 +244,25 @@ func filterReleases(releases []Release, fl Flags) []Release {
 	return newReleases
 }
 
+// Returns the simplek8s running version from the `uname` syscall.
+func getRunningVersion() (string, error) {
+	log.WithField("start", "getRunningVersion").Debug()
+	defer log.WithField("end", "getRunningVersion").Debug()
+
+	uname := unix.Utsname{}
+	if err := unix.Uname(&uname); err != nil {
+		log.Error(err)
+		return "", err
+	}
+
+	re := regexp.MustCompile(`simplek8s-(?P<version>\d+)`)
+	match := re.FindStringSubmatch(string(uname.Release[:]))
+	if len(match) != len(re.SubexpNames()) {
+		return "", nil
+	}
+	return match[re.SubexpIndex("version")], nil
+}
+
 // TODO Mark current in the list
 // TODO Hide some headers if flags filter are set
 func cmdList(fl Flags) error {
@@ -260,11 +281,40 @@ func cmdList(fl Flags) error {
 	releases := parseReleasesFromSha256Sums(bSha256Sums)
 	releases = filterReleases(releases, fl)
 
+	// Fetch current running version
+	runningVersion := ""
+	if version, err := getRunningVersion(); err != nil {
+		log.Error(err)
+		return err
+	} else {
+		runningVersion = version
+	}
+	fmt.Println(runningVersion)
+
 	// Print each release
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintln(tw, "DISTRIBUTION\tARCHITECTURE\tCOMPONENT\tVERSION")
+	fmt.Fprintln(tw, "DISTRIBUTION\tARCHITECTURE\tCOMPONENT\tVERSION\tSTATUS")
 	for _, r := range releases {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Distribution, r.Architecture, r.Component, r.Version)
+
+		//TODO Is this release installed?
+
+		// Is this release running?
+		if r.Version == runningVersion {
+			if len(r.Status) > 0 {
+				r.Status += ", "
+			}
+			r.Status = "Running"
+		}
+
+		fmt.Fprintf(
+			tw,
+			"%s\t%s\t%s\t%s\t%s\n",
+			r.Distribution,
+			r.Architecture,
+			r.Component,
+			r.Version,
+			r.Status,
+		)
 	}
 	tw.Flush()
 
