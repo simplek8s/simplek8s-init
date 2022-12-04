@@ -6,13 +6,11 @@ import (
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	systemdGenerator "github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator"
-	"github.com/jlsalvador/simplek8s/internal/pkg/update"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	CMDALIAS_GENERATOR string = "simplek8s-generator"
-	CMDALIAS_UPDATE    string = "simplek8s-update"
 )
 
 func IsCmdAlias(args []string) bool {
@@ -24,7 +22,6 @@ func IsCmdAlias(args []string) bool {
 	got := filepath.Base(fullPathFilename)
 	return common.IsStringInList(got, []string{
 		CMDALIAS_GENERATOR,
-		CMDALIAS_UPDATE,
 	})
 }
 
@@ -45,18 +42,6 @@ func isCmdAliasSystemdGenerator(args []string) bool {
 		common.IsDir(args[1]) && common.IsDir(args[2]) && common.IsDir(args[3]) // Validate directories
 }
 
-func isCmdAliasUpdate(args []string) bool {
-	// args[0] own cmd
-	if len(args) < 1 {
-		return false
-	}
-
-	fullPathFilename := args[0]
-	got := filepath.Base(fullPathFilename)
-	want := CMDALIAS_UPDATE
-	return got == want
-}
-
 func cmdAliasSystemdGenerator(args []string) error {
 	log.WithFields(log.Fields{
 		"start": "cmdAliasSystemdGenerator",
@@ -74,16 +59,6 @@ func cmdAliasSystemdGenerator(args []string) error {
 	return nil
 }
 
-func cmdAliasUpdate(args []string) error {
-	log.WithFields(log.Fields{
-		"start": "cmdAliasUpdate",
-		"args":  args,
-	}).Debug()
-	defer log.WithField("end", "cmdAliasUpdate").Debug()
-
-	return update.Cmd(args)
-}
-
 func RunCmdAlias(args []string) error {
 	log.WithFields(log.Fields{
 		"start": "RunCmdAlias",
@@ -94,8 +69,6 @@ func RunCmdAlias(args []string) error {
 	switch {
 	case isCmdAliasSystemdGenerator(args):
 		return cmdAliasSystemdGenerator(args[1:])
-	case isCmdAliasUpdate(args):
-		return cmdAliasUpdate(args[1:])
 	default:
 		err := fmt.Errorf("unknown alias: %q", args)
 		log.Error(err)

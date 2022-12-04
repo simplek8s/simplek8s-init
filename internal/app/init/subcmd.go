@@ -5,18 +5,15 @@ import (
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate"
-	"github.com/jlsalvador/simplek8s/internal/pkg/update"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	SUBCOMMAND_POPULATE string = "populate"
-	SUBCOMMAND_UPDATE   string = "update"
 )
 
 var SUBCOMMANDS = []string{
 	SUBCOMMAND_POPULATE,
-	SUBCOMMAND_UPDATE,
 }
 
 func IsSubcmd(args []string) bool {
@@ -48,11 +45,6 @@ func RunSubCommands(args []string) error {
 	switch args[1] {
 	case SUBCOMMAND_POPULATE:
 		if err := populate.Cmd(args[2:]); err != nil {
-			log.Error(err)
-			return err
-		}
-	case SUBCOMMAND_UPDATE:
-		if err := update.Cmd(args[2:]); err != nil {
 			log.Error(err)
 			return err
 		}
