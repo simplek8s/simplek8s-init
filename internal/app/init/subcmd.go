@@ -18,10 +18,9 @@ var SUBCOMMANDS = []string{
 
 func IsSubcmd(args []string) bool {
 	log.WithFields(log.Fields{
-		"start": "IsSubcmd",
-		"args":  args,
-	}).Debug()
-	defer log.WithField("end", "IsSubcmd").Debug()
+		"args": args,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	if len(args) < 2 {
 		return false
@@ -31,10 +30,9 @@ func IsSubcmd(args []string) bool {
 
 func RunSubCommands(args []string) error {
 	log.WithFields(log.Fields{
-		"start": "RunSubCommands",
-		"args":  args,
-	}).Debug()
-	defer log.WithField("end", "RunSubCommands").Debug()
+		"args": args,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	if len(args) <= 1 {
 		err := fmt.Errorf("expected one of these subcommands: %v", SUBCOMMANDS)

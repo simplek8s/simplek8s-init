@@ -47,8 +47,12 @@ func IsDir(path string) bool {
 }
 
 func RenderTemplate(templates fs.FS, templateFilename string, data any) ([]byte, error) {
-	log.WithField("start", "RenderTemplate").Debug()
-	defer log.WithField("stop", "RenderTemplate").Debug()
+	log.WithFields(log.Fields{
+		"templates":        templates,
+		"templateFilename": templateFilename,
+		"data":             data,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Parse template
 	tmpl, err := template.ParseFS(templates, templateFilename)
@@ -77,15 +81,14 @@ func RenderTemplate(templates fs.FS, templateFilename string, data any) ([]byte,
 
 func CreateSymlink(path string, target string, overwrite bool, uid int, gid int, hard bool) error {
 	log.WithFields(log.Fields{
-		"start":     "CreateSymlink",
 		"path":      path,
 		"target":    target,
 		"overwrite": overwrite,
 		"uid":       uid,
 		"gid":       gid,
 		"hard":      hard,
-	}).Debug()
-	defer log.WithField("stop", "CreateSymlink").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Overwrite?
 	if info, _ := os.Stat(path); info != nil {

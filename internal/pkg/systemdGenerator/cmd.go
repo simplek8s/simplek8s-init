@@ -15,8 +15,12 @@ import (
 // Will creates systemd units that will mount and populate paths
 // https://www.freedesktop.org/software/systemd/man/systemd.generator.html#Description
 func CmdSystemdGenerator(generatorDir string, earlyDir string, lateDir string) error {
-	log.WithField("start", "CmdSystemdGenerator").Debug()
-	defer log.WithField("end", "CmdSystemdGenerator").Debug()
+	log.WithFields(log.Fields{
+		"generatorDir": generatorDir,
+		"earlyDir":     earlyDir,
+		"lateDir":      lateDir,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Validate args
 	if !common.IsDir(generatorDir) {

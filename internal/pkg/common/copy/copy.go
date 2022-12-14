@@ -44,11 +44,13 @@ type CopyOptions struct {
 // doc: https://github.com/moby/moby/blob/master/daemon/graphdriver/copy/copy.go
 func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *CopyOptions) error {
 	log.WithFields(log.Fields{
-		"start": "copyEntry",
-		"src":   filepath.Join(srcPath, src),
-		"dst":   dst,
-	}).Debug()
-	defer log.WithField("stop", "copyEntry").Debug()
+		"srcPath": srcPath,
+		"src":     src,
+		"fi":      fi,
+		"dst":     dst,
+		"opt":     opt,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	fullname := filepath.Join(srcPath, src)
 	mode := fi.Mode()
@@ -194,12 +196,11 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 // Copy the whole `src` directory content into the directory `dst`
 func CopyDir(src string, dst string, options *CopyOptions) error {
 	log.WithFields(log.Fields{
-		"start":   "CopyDir",
 		"src":     src,
 		"dst":     dst,
 		"options": options,
-	}).Debug()
-	defer log.WithField("stop", "CopyDir").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Default options
 	var root string

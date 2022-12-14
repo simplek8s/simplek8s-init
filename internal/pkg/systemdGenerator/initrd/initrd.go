@@ -14,8 +14,11 @@ import (
 
 // Create and enable systemd units
 func initrdSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
-	log.WithField("start", "initrdSystemdUnits").Debug()
-	defer log.WithField("stop", "initrdSystemdUnits").Debug()
+	log.WithFields(log.Fields{
+		"sr":           sr,
+		"generatorDir": generatorDir,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	for _, unit := range []struct {
 		name     string
@@ -227,8 +230,11 @@ func initrdSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
 }
 
 func initrdYamlMounts(sr *sysroot.Sysroot, generatorDir string) error {
-	log.WithField("start", "initrdYamlMounts").Debug()
-	defer log.WithField("end", "initrdYamlMounts").Debug()
+	log.WithFields(log.Fields{
+		"sr":           sr,
+		"generatorDir": generatorDir,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Just write systemd mount units from yaml
 	if yamlSimpleK8s, err := yaml.GetYamlSimpleK8s(); err != nil {
@@ -309,10 +315,10 @@ func initrdYamlMounts(sr *sysroot.Sysroot, generatorDir string) error {
 
 func CmdSystemdGeneratorInitrd(sr *sysroot.Sysroot, generatorDir string) error {
 	log.WithFields(log.Fields{
-		"start":        "CmdSystemdGeneratorInitrd",
+		"sr":           sr,
 		"generatorDir": generatorDir,
-	}).Debug()
-	defer log.WithField("end", "CmdSystemdGeneratorInitrd").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	if err := initrdSystemdUnits(sr, generatorDir); err != nil {
 		log.Error(err)

@@ -17,10 +17,9 @@ const (
 
 func Cmd(args []string) error {
 	log.WithFields(log.Fields{
-		"start": "Cmd",
-		"args":  args,
-	}).Debug()
-	defer log.WithField("end", "Cmd").Debug()
+		"args": args,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	cmdPopulate := flag.NewFlagSet("populate", flag.ExitOnError)
 	cmdPopulateStage := cmdPopulate.String("stage", "", "populate stage, could be initrd or sysroot")
@@ -35,11 +34,10 @@ func Cmd(args []string) error {
 
 func CmdPopulate(stage string, output string) error {
 	log.WithFields(log.Fields{
-		"start":  "CmdPopulate",
 		"stage":  stage,
 		"output": output,
-	}).Debug()
-	defer log.WithField("end", "CmdPopulate").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Validate args
 	if !common.IsDir(output) {

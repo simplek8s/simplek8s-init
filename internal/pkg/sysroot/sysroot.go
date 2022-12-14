@@ -718,12 +718,9 @@ func (sysroot *Sysroot) writeFiles() error {
 // Commit all changes to Sysroot.Path
 func (sysroot *Sysroot) Write() error {
 	log.WithFields(log.Fields{
-		"shadows":     sysroot.Shadows,
-		"groups":      sysroot.Groups,
-		"users":       sysroot.Users,
-		"directories": sysroot.Directories,
-		"files":       sysroot.Files,
-	}).Debug()
+		"sysroot": sysroot,
+	}).Debug("start")
+	log.Debug("end")
 
 	if err := sysroot.writeLinks(); err != nil {
 		log.Error(err)

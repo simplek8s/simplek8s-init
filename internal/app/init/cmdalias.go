@@ -44,10 +44,9 @@ func isCmdAliasSystemdGenerator(args []string) bool {
 
 func cmdAliasSystemdGenerator(args []string) error {
 	log.WithFields(log.Fields{
-		"start": "cmdAliasSystemdGenerator",
-		"args":  args,
-	}).Debug()
-	defer log.WithField("end", "cmdAliasSystemdGenerator").Debug()
+		"args": args,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	normalDir := args[0]
 	earlyDir := args[1]
@@ -61,10 +60,9 @@ func cmdAliasSystemdGenerator(args []string) error {
 
 func RunCmdAlias(args []string) error {
 	log.WithFields(log.Fields{
-		"start": "RunCmdAlias",
-		"args":  args,
-	}).Debug()
-	defer log.WithField("end", "RunCmdAlias").Debug()
+		"args": args,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	switch {
 	case isCmdAliasSystemdGenerator(args):

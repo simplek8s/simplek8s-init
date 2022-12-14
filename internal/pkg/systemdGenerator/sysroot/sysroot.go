@@ -12,8 +12,11 @@ import (
 
 // Create and enable systemd units
 func writeSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
-	log.WithField("start", "writeSystemdUnits").Debug()
-	defer log.WithField("end", "writeSystemdUnits").Debug()
+	log.WithFields(log.Fields{
+		"sr":           sr,
+		"generatorDir": generatorDir,
+	}).Debug("start")
+	defer log.Debug("end")
 
 	presetContent := ""
 	for _, unit := range []struct {
@@ -100,10 +103,10 @@ func writeSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
 
 func CmdSystemdGeneratorSysroot(sr *sysroot.Sysroot, generatorDir string) error {
 	log.WithFields(log.Fields{
-		"start":        "CmdSystemdGeneratorSysroot",
+		"sr":           sr,
 		"generatorDir": generatorDir,
-	}).Debug()
-	defer log.WithField("end", "CmdSystemdGeneratorSysroot").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	if err := writeSystemdUnits(sr, generatorDir); err != nil {
 		log.Error(err)

@@ -12,10 +12,9 @@ import (
 // TODO: Replace this func by systemd tmpfiles.d
 func populateInitrdWithFiles(output string) error {
 	log.WithFields(log.Fields{
-		"start":  "PopulateInitrdWithFiles",
 		"output": output,
-	}).Debug()
-	defer log.WithField("end", "PopulateInitrdWithFiles").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Copy each src into dst
 	for _, tbc := range []struct {
@@ -69,10 +68,9 @@ func populateInitrdWithFiles(output string) error {
 
 func CmdPopulateInitrd(output string) error {
 	log.WithFields(log.Fields{
-		"start":  "CmdPopulateInitrd",
 		"output": output,
-	}).Debug()
-	defer log.WithField("end", "CmdPopulateInitrd").Debug()
+	}).Debug("start")
+	defer log.WithField("end", "CmdPopulateInitrd").Debug("end")
 
 	if err := populateInitrdWithFiles(output); err != nil {
 		log.WithField("output", output).Error(err)

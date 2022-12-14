@@ -19,12 +19,11 @@ import (
 // Configure "/usr/share/factory/etc/ssh/sshd_config"
 func populateSysrootSshd(output string, sr *sysroot.Sysroot, allowRootPassword bool) error {
 	log.WithFields(log.Fields{
-		"start":             "populateSysrootSshd",
 		"output":            output,
 		"sr":                sr,
 		"allowRootPassword": allowRootPassword,
-	}).Debug()
-	defer log.WithField("end", "populateSysrootSshd").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Generate content
 	tmplName := "assets/templates/usr/share/factory/etc/ssh/sshd_config.go.tmpl"
@@ -70,10 +69,8 @@ func hashPassword(plainPassword string) (string, error) {
 }
 
 func generatePasswordPlainHashed() (string, string, error) {
-	log.WithFields(log.Fields{
-		"start": "generatePasswordPlainHashed",
-	}).Debug()
-	defer log.WithField("end", "generatePasswordPlainHashed").Debug()
+	log.Debug("start")
+	defer log.Debug("end")
 
 	// Kernel debug mode
 	if common.IsCmdlineDebug() {
@@ -96,12 +93,11 @@ func generatePasswordPlainHashed() (string, string, error) {
 // Ensure a "root" user, passwd and shadow entry
 func populateSysrootUsers(output string, sr *sysroot.Sysroot, generateRootPassword bool) error {
 	log.WithFields(log.Fields{
-		"start":            "populateSysrootUsers",
 		"output":           output,
 		"sr":               sr,
 		"generatePassword": generateRootPassword,
-	}).Debug()
-	defer log.WithField("end", "populateSysrootUsers").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	// Lets set the "root" password
 	pwdHashed := "!!"
@@ -224,10 +220,9 @@ func populateSysrootUsers(output string, sr *sysroot.Sysroot, generateRootPasswo
 
 func CmdPopulateSysroot(output string) error {
 	log.WithFields(log.Fields{
-		"start":  "CmdPopulateSysroot",
 		"output": output,
-	}).Debug()
-	defer log.WithField("end", "CmdPopulateSysroot").Debug()
+	}).Debug("start")
+	defer log.Debug("end")
 
 	yamlSimpleK8s, err := yaml.GetYamlSimpleK8s()
 	if err != nil {
