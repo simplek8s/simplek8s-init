@@ -2,7 +2,7 @@ package yaml
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -74,6 +74,9 @@ type SimpleK8s struct {
 }
 
 func getDevices() ([]string, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	var err error
 	disks := []string{}
 
@@ -91,6 +94,11 @@ func getDevices() ([]string, error) {
 
 // Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
 func getYamlContent(blockDevices []string) ([]byte, error) {
+	log.WithFields(log.Fields{
+		"blockDevices": blockDevices,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	var directories = []string{
 		"/",
 		"/simplek8s/",
@@ -143,7 +151,10 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 
 				fis, err := fs.ReadDir(path)
 				if err != nil {
-					log.WithField("readDirErr", err).Debug("skipping directory", path)
+					log.WithFields(log.Fields{
+						"readDirErr": err,
+						"path":       path,
+					}).Debug("skipping")
 					continue
 				}
 
@@ -159,7 +170,10 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 					}).Debug()
 
 					if isDir || !rMath {
-						log.WithField("fullFilename", fullFilename).Debug("skipping file", filename)
+						log.WithFields(log.Fields{
+							"fullFilename": fullFilename,
+							"filename":     filename,
+						}).Debug("skipping")
 						continue
 					}
 
@@ -176,7 +190,7 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 					}
 					defer file.Close()
 
-					b, err := ioutil.ReadAll(file)
+					b, err := io.ReadAll(file)
 					if err != nil {
 						log.WithField("readAllErr", err).Warn()
 						continue
@@ -208,10 +222,12 @@ func unmarshal(yamlContent []byte) (*SimpleK8s, error) {
 // Search across all FAT32 partitions the `simplek8s.yaml` file and
 // returns it as a `SimpleK8s` type struct.
 func GetYamlSimpleK8s() (*SimpleK8s, error) {
+	log.Debug("start")
+	defer log.Debug("end")
 
 	// Get all block devices
 	blockDevices, err := getDevices()
-	log.WithField("devices", blockDevices).Debug()
+	log.WithField("blockDevices", blockDevices).Debug()
 	if err != nil {
 		log.WithField("getYamlContent", err).Warn()
 		return nil, err
