@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 

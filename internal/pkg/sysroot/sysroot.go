@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
-	"github.com/jlsalvador/simplek8s/internal/pkg/linux/passwd"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
+	"github.com/jlsalvador/simplek8s/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
 	log "github.com/sirupsen/logrus"
 )
 

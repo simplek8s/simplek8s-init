@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	cmd "github.com/jlsalvador/simplek8s/internal/app/init"
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 

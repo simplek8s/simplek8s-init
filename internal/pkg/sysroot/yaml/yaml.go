@@ -9,7 +9,7 @@ import (
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/jlsalvador/simplek8s/internal/pkg/linux/procfs"
+	"github.com/jlsalvador/simplek8s/pkg/linux/procfs"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )

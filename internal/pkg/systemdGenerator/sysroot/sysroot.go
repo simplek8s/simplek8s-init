@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/templates"
+	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 

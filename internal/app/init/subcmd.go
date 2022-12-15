@@ -3,8 +3,8 @@ package init
 import (
 	"fmt"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate"
+	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 

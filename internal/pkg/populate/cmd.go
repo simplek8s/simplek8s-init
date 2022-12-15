@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate/initrd"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate/sysroot"
+	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 

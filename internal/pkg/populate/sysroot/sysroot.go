@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/jlsalvador/simplek8s/internal/pkg/common"
-	"github.com/jlsalvador/simplek8s/internal/pkg/linux/passwd"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate/templates"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
+	"github.com/jlsalvador/simplek8s/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
 	log "github.com/sirupsen/logrus"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
