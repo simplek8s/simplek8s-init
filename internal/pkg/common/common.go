@@ -15,6 +15,12 @@ import (
 )
 
 func GetEnv(key, fallback string) string {
+	log.WithFields(log.Fields{
+		"key":      key,
+		"fallback": fallback,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	if value, ok := os.LookupEnv(key); ok {
 		return value
 	}
@@ -22,6 +28,12 @@ func GetEnv(key, fallback string) string {
 }
 
 func IsStringInList(value string, list []string) bool {
+	log.WithFields(log.Fields{
+		"value": value,
+		"list":  list,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	for _, v := range list {
 		if value == v {
 			return true
@@ -31,6 +43,11 @@ func IsStringInList(value string, list []string) bool {
 }
 
 func IsDir(path string) bool {
+	log.WithFields(log.Fields{
+		"path": path,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	if len(path) == 0 {
 		log.Debugf("path %q is empty", path)
 		return false
@@ -145,34 +162,45 @@ func CreateSymlink(path string, target string, overwrite bool, uid int, gid int,
 	return nil
 }
 
-func GetOwnUidGid() (int, int, error) {
+func GetOwnUidGid() (uid int, gid int, err error) {
+	uid, gid = -1, -1
 	user, err := user.Current()
 	if err != nil {
-		return -1, -1, err
+		return
 	}
-	uid, err := strconv.Atoi(user.Uid)
+	uid, err = strconv.Atoi(user.Uid)
 	if err != nil {
-		return -1, -1, err
+		return
 	}
-	gid, err := strconv.Atoi(user.Gid)
+	gid, err = strconv.Atoi(user.Gid)
 	if err != nil {
-		return -1, -1, err
+		return
 	}
-	return uid, gid, nil
+	return
 }
 
 func IsCmdlineDebug() bool {
-	if cmdlineContent, err := os.ReadFile("/proc/cmdline"); err != nil {
+	return isCmdlineDebug("/proc/cmdline")
+}
+
+func isCmdlineDebug(filePath string) bool {
+	log.WithField("filePath", filePath).Debug("start")
+	defer log.Debug("end")
+
+	re := regexp.MustCompile(`\s*debug\s*`)
+
+	if cmdlineContent, err := os.ReadFile(filePath); err != nil {
 		log.Warn(err)
-	} else if match, err := regexp.Match(`\s*debug\s*`, cmdlineContent); err != nil {
-		log.Warn(err)
-	} else if match {
-		return true
+		return false
+	} else {
+		return re.Match(cmdlineContent)
 	}
-	return false
 }
 
 func CheckFileExists(filePath string) bool {
+	log.WithField("filePath", filePath).Debug("start")
+	defer log.Debug("end")
+
 	_, error := os.Stat(filePath)
 	return !errors.Is(error, os.ErrNotExist)
 }
