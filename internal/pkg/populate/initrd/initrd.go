@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/jlsalvador/simplek8s/pkg/common/copy"
+	"github.com/jlsalvador/simplek8s/pkg/copy"
 	log "github.com/sirupsen/logrus"
 )
 
