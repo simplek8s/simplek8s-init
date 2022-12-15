@@ -241,8 +241,8 @@ func initrdYamlMounts(sr *sysroot.Sysroot, generatorDir string) error {
 		log.Error(err)
 		return err
 	} else if yamlSimpleK8s != nil {
+		log.WithField("mounts", yamlSimpleK8s.Storage.Mounts).Debug()
 		for _, mount := range yamlSimpleK8s.Storage.Mounts {
-			log.Debug(mount)
 
 			// patch `where` because switch root to sysroot
 			where := mount.Where
@@ -284,7 +284,7 @@ func initrdYamlMounts(sr *sysroot.Sysroot, generatorDir string) error {
 				Uid:       0,
 				Gid:       0,
 			}
-			log.Debug(srFile)
+			log.WithField("srFile", srFile).Debug()
 
 			// Replace or append
 			found := false
