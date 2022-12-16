@@ -1,5 +1,8 @@
 # simplek8s.yaml
 
+SimpleK8s-Init will configures and populates the initrd and sysroot boot stages.
+
+
 ## Configuration specifications
 
 The file `simplek8s.yaml` is a YAML document conforming to the following specification:
@@ -47,7 +50,7 @@ users:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com"
 storage:
   mounts:
-    - what: /dev/sda2
+    - what: "/dev/disk/by-label/var"
       where: /var
 ```
 
@@ -66,7 +69,7 @@ users:
 
 storage:
   mounts:
-    - what: "/dev/sda2"
+    - what: "/dev/disk/by-label/var"
       where: "/var"
       type: "ext4"
       options: "defaults"
