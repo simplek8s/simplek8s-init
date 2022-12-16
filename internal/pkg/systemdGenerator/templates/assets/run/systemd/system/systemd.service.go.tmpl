@@ -16,6 +16,10 @@ DefaultDependencies=no
 
 [Service]
 Type={{ .Type }}
+{{- if .Restart }}
+Restart={{ .Restart }}
+{{- end }}
+RemainAfterExit={{ if .RemainAfterExit }}yes{{ else }}no{{ end }}
 {{- range .ExecStart }}
 ExecStart={{ . }}
 {{- end }}

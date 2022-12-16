@@ -40,7 +40,9 @@ func writeSystemdUnits(sr *sysroot.Sysroot, generatorDir string) error {
 					"usr-libexec.mount",
 					"usr-local.mount",
 				},
-				Type: "oneshot",
+				Type:            "oneshot",
+				Restart:         "no",
+				RemainAfterExit: true,
 				ExecStart: []string{
 					"/usr/bin/systemd-machine-id-setup",
 					"/usr/lib/simplek8s/init populate -stage=sysroot -output=/",

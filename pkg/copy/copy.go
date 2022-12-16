@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -41,7 +42,10 @@ type CopyOptions struct {
 	PreserveXAttrs bool
 }
 
-// doc: https://github.com/moby/moby/blob/master/daemon/graphdriver/copy/copy.go
+// Will overwrite `dst`.
+//
+// Doc:
+//   - https://github.com/moby/moby/blob/master/daemon/graphdriver/copy/copy.go
 func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *CopyOptions) error {
 	log.WithFields(log.Fields{
 		"srcPath": srcPath,
@@ -59,7 +63,9 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 	var stat *syscall.Stat_t
 	if opt.PreserveAll || opt.PreserveUid || opt.PreserveGid || opt.PreserveATime || opt.PreserveMTime {
 		if s, ok := fi.Sys().(*syscall.Stat_t); !ok {
-			log.WithField("fullname", fullname).Warn("can not stat file, we can not preserve: uid, gid, atime, mtime")
+			log.WithFields(log.Fields{
+				"fullname": fullname,
+			}).Warn("can not stat file, we can not preserve: uid, gid, atime, mtime")
 		} else {
 			stat = s
 		}
@@ -71,11 +77,11 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 			perm = opt.DirPerm
 		}
 
-		if err := os.Mkdir(dst, perm); err != nil {
+		if err := os.MkdirAll(dst, perm); err != nil {
 			log.WithFields(log.Fields{
 				"dst":  dst,
 				"perm": perm,
-			}).Error()
+			}).Error(err)
 			return err
 		}
 	case mode.IsRegular():
@@ -83,21 +89,33 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 			perm = opt.FilePerm
 		}
 
+		// Remove possible exists file
+		if common.CheckFileExists(dst) {
+			if err := os.Remove(dst); err != nil {
+				log.WithFields(log.Fields{
+					"dst": dst,
+				}).Error(err)
+				return err
+			}
+		}
+
 		fSrc, err := opt.Fsys.Open(src)
 		if err != nil {
-			log.WithField("src", src).Error()
+			log.WithFields(log.Fields{
+				"src": src,
+			}).Error(err)
 			return err
 		}
 		defer fSrc.Close()
 
-		flag := os.O_WRONLY | os.O_CREATE + os.O_EXCL
+		flag := os.O_WRONLY | os.O_CREATE | os.O_EXCL
 		fDst, err := os.OpenFile(dst, flag, perm)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"dst":  dst,
 				"flag": flag,
 				"perm": perm,
-			}).Error()
+			}).Error(err)
 			return err
 		}
 		defer fDst.Close()
@@ -106,7 +124,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 			log.WithFields(log.Fields{
 				"fDst": fDst,
 				"fSrc": fSrc,
-			}).Error()
+			}).Error(err)
 			return err
 		}
 	case mode&os.ModeSymlink != 0:
@@ -114,14 +132,16 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 
 		target, err := os.Readlink(fullname)
 		if err != nil {
-			log.WithField("fullname", fullname).Error()
+			log.WithFields(log.Fields{
+				"fullname": fullname,
+			}).Error(err)
 			return err
 		}
-		if err := os.Symlink(target, dst); err != nil {
+		if err := common.CreateSymlink(dst, target, true, opt.Uid, opt.Gid, false); err != nil {
 			log.WithFields(log.Fields{
 				"taget": target,
 				"dst":   dst,
-			}).Error()
+			}).Error(err)
 			return err
 		}
 	case mode&os.ModeNamedPipe != 0:
@@ -165,7 +185,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 					"dst": dst,
 					"uid": uid,
 					"gid": gid,
-				}).Error()
+				}).Error(err)
 				return err
 			}
 		}
@@ -182,7 +202,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 				log.WithFields(log.Fields{
 					"dst": dst,
 					"tv":  tv,
-				}).Error()
+				}).Error(err)
 				return err
 			}
 		}

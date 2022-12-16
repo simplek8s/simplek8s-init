@@ -18,6 +18,8 @@ type TmplDataSystemdUnitService struct {
 	After               []string
 	ConditionPathExists []string
 	Type                string
+	Restart             string
+	RemainAfterExit     bool
 	ExecStart           []string
 }
 

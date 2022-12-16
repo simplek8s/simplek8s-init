@@ -30,6 +30,7 @@ func populateInitrdWithFiles(output string) error {
 					regexp.MustCompile(`/usr/share/factory/sysroot`),
 				},
 				PreserveAll: true,
+				Overwrite:   true,
 			},
 		},
 		{
@@ -37,6 +38,7 @@ func populateInitrdWithFiles(output string) error {
 			dst: filepath.Join(output, "/usr/share/factory/etc/ssl/certs"),
 			opt: &copy.CopyOptions{
 				PreserveAll: true,
+				Overwrite:   true,
 			},
 		},
 		{
@@ -44,6 +46,7 @@ func populateInitrdWithFiles(output string) error {
 			dst: output,
 			opt: &copy.CopyOptions{
 				PreserveAll: true,
+				Overwrite:   true,
 			},
 		},
 	} {
@@ -57,8 +60,8 @@ func populateInitrdWithFiles(output string) error {
 		}
 	}
 
-	// Creates `/usr/local` directory for the future mount point
-	// `/usr` will be Read-Only, so `/usr/local` must be created before.
+	// Creates `/usr/local` directory because the future mount point `/usr`
+	// will be Read-Only, so `/usr/local` must be created before.
 	if err := os.MkdirAll(filepath.Join(output, "/usr/local"), 0755); err != nil {
 		log.Error(err)
 		return err

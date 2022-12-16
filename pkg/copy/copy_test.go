@@ -73,6 +73,7 @@ func checkLinks(links []struct {
 	return nil
 }
 
+// TODO: Test Overwrite when file dst exists
 func TestCopyDir(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 
