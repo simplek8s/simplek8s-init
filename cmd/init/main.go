@@ -28,8 +28,7 @@ func main() {
 		logFileName = filepath.Join(os.TempDir(), logFileName)
 		log.Infof("logfile: %s", logFileName)
 		if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err != nil {
-			log.Error(err)
-			panic(err)
+			log.Warn(err)
 		} else {
 			defer file.Close()
 			log.SetOutput(io.MultiWriter(file, os.Stdout)) // Write into file and stdout
