@@ -12,6 +12,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func isStageInitrd() bool {
+	_, err := os.Stat("/etc/initrd-release")
+	return !os.IsNotExist(err)
+}
+
 // Will creates systemd units that will mount and populate paths
 // https://www.freedesktop.org/software/systemd/man/systemd.generator.html#Description
 func CmdSystemdGenerator(generatorDir string, earlyDir string, lateDir string) error {
@@ -34,7 +39,7 @@ func CmdSystemdGenerator(generatorDir string, earlyDir string, lateDir string) e
 	}
 
 	// We could be executed by initrd or by sysroot
-	if _, err := os.Stat(filepath.Join(sr.Path, "/etc/initrd-release")); !os.IsNotExist(err) {
+	if isStageInitrd() {
 		if err := initrd.CmdSystemdGeneratorInitrd(sr, generatorDir); err != nil {
 			log.Error(err)
 			return err
