@@ -9,7 +9,6 @@ import (
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/jlsalvador/simplek8s/pkg/linux/procfs"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -77,18 +76,17 @@ func getDevices() ([]string, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	var err error
 	disks := []string{}
-
-	partitions, err := procfs.ParsePartitions()
-	if err != nil {
+	dir := "/dev/disk/by-path"
+	if devices, err := os.ReadDir(dir); err != nil {
+		log.Error(err)
 		return nil, err
+	} else {
+		log.WithField("devices", devices).Debug()
+		for _, device := range devices {
+			disks = append(disks, filepath.Join(dir, device.Name()))
+		}
 	}
-
-	for _, partition := range partitions {
-		disks = append(disks, "/dev/"+partition.Name)
-	}
-
 	return disks, nil
 }
 
