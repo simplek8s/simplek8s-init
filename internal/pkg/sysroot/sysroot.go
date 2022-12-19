@@ -61,6 +61,12 @@ type Sysroot struct {
 }
 
 func isIntInList(value int, list []int) bool {
+	log.WithFields(log.Fields{
+		"value": value,
+		"list":  list,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	for _, v := range list {
 		if value == v {
 			return true
@@ -70,6 +76,12 @@ func isIntInList(value int, list []int) bool {
 }
 
 func getNextGid(groups []passwd.Group, isSystem bool) int {
+	log.WithFields(log.Fields{
+		"groups":   groups,
+		"isSystem": isSystem,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	current := 0
 	if !isSystem {
 		current = 1000
@@ -91,6 +103,12 @@ func getNextGid(groups []passwd.Group, isSystem bool) int {
 }
 
 func getNextUid(users []passwd.User, isSystem bool) int {
+	log.WithFields(log.Fields{
+		"users":    users,
+		"isSystem": isSystem,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	current := 0
 	if !isSystem {
 		current = 1000
@@ -112,6 +130,12 @@ func getNextUid(users []passwd.User, isSystem bool) int {
 }
 
 func updateOrAppendShadow(shadows []passwd.Shadow, shadow passwd.Shadow) []passwd.Shadow {
+	log.WithFields(log.Fields{
+		"shadows": shadows,
+		"shadow":  shadow,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	newShadows := make([]passwd.Shadow, len(shadows))
 	copy(newShadows, shadows)
 	for index, shadowFromList := range newShadows {
@@ -124,6 +148,12 @@ func updateOrAppendShadow(shadows []passwd.Shadow, shadow passwd.Shadow) []passw
 }
 
 func updateOrAppendGroup(groups []passwd.Group, group passwd.Group) []passwd.Group {
+	log.WithFields(log.Fields{
+		"groups": groups,
+		"group":  group,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	newGroups := make([]passwd.Group, len(groups))
 	copy(newGroups, groups)
 	for index, groupFromList := range newGroups {
@@ -136,6 +166,12 @@ func updateOrAppendGroup(groups []passwd.Group, group passwd.Group) []passwd.Gro
 }
 
 func updateOrAppendUser(users []passwd.User, user passwd.User) []passwd.User {
+	log.WithFields(log.Fields{
+		"users": users,
+		"user":  user,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	newUsers := make([]passwd.User, len(users))
 	copy(newUsers, users)
 	for index, userFromList := range newUsers {
@@ -148,6 +184,11 @@ func updateOrAppendUser(users []passwd.User, user passwd.User) []passwd.User {
 }
 
 func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.SimpleK8s) error {
+	log.WithFields(log.Fields{
+		"simpleK8s": simpleK8s,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	for _, group := range simpleK8s.Groups {
 		isSystem := getBoolByDefault(group.System, false)
 
@@ -168,6 +209,11 @@ func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.SimpleK8s) error {
 }
 
 func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
+	log.WithFields(log.Fields{
+		"simpleK8s": simpleK8s,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	for _, user := range simpleK8s.Users {
 		isSystem := getBoolByDefault(user.System, false)
 
@@ -337,6 +383,11 @@ func updateOrAppendLink(links []Link, link Link) []Link {
 }
 
 func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
+	log.WithFields(log.Fields{
+		"simpleK8s": simpleK8s,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	if simpleK8s.Storage != nil {
 
 		// Set UID and GID from own process by default
@@ -381,6 +432,11 @@ func updateOrAppendDirectory(directories []Directory, directory Directory) []Dir
 }
 
 func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
+	log.WithFields(log.Fields{
+		"simpleK8s": simpleK8s,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	if simpleK8s.Storage != nil {
 
 		// Set UID and GID from own process by default
@@ -432,6 +488,11 @@ func updateOrAppendFile(files []File, file File) []File {
 }
 
 func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
+	log.WithFields(log.Fields{
+		"simpleK8s": simpleK8s,
+	}).Debug("start")
+	defer log.Debug("end")
+
 	if simpleK8s.Storage != nil {
 
 		// Set UID and GID from own process by default
@@ -453,6 +514,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 			var mode fs.FileMode = 0664
 			if file.Permissions != nil {
 				if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
+					log.Error(err)
 					return err
 				} else {
 					mode = fs.FileMode(valueAsInt)
@@ -465,6 +527,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 					var err error
 					content, err = base64.StdEncoding.DecodeString(*file.Content)
 					if err != nil {
+						log.Error(err)
 						return err
 					}
 				} else {
@@ -486,23 +549,33 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 }
 
 func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.SimpleK8s) error {
+	log.WithFields(log.Fields{
+		"simpleK8s": simpleK8s,
+	}).Debug("start")
+	log.Debug("end")
+
 	if simpleK8s == nil {
 		return nil
 	}
 
 	if err := sysroot.parseYAMLGroups(*simpleK8s); err != nil {
+		log.Error(err)
 		return err
 	}
 	if err := sysroot.parseYAMLUsers(*simpleK8s); err != nil {
+		log.Error(err)
 		return err
 	}
 	if err := sysroot.parseYAMLLinks(*simpleK8s); err != nil {
+		log.Error(err)
 		return err
 	}
 	if err := sysroot.parseYAMLDirectories(*simpleK8s); err != nil {
+		log.Error(err)
 		return err
 	}
 	if err := sysroot.parseYAMLFiles(*simpleK8s); err != nil {
+		log.Error(err)
 		return err
 	}
 	return nil

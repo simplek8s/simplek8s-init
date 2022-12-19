@@ -227,22 +227,22 @@ func GetYamlSimpleK8s() (*SimpleK8s, error) {
 
 	// Get all block devices
 	blockDevices, err := getDevices()
-	log.WithField("blockDevices", blockDevices).Debug()
 	if err != nil {
-		log.WithField("getYamlContent", err).Warn()
-		return nil, err
+		log.Warn(err)
+		return nil, nil
 	}
+	log.WithField("blockDevices", blockDevices).Debug()
 
 	// Search for `simplek8s.yaml` content across all block devices (filter by FAT32 partitions)
 	var yamlContent []byte
 	if yamlContent, err = getYamlContent(blockDevices); err != nil {
 		log.WithFields(log.Fields{
-			"content": string(yamlContent),
-		}).Warn(err)
+			"yamlContent": string(yamlContent),
+		}).Error(err)
 		return nil, err
 	} else if yamlContent == nil {
 		log.WithFields(log.Fields{
-			"content": string(yamlContent),
+			"yamlContent": string(yamlContent),
 		}).Warn("can not find simplek8s.yaml")
 		return nil, nil
 	}
@@ -250,9 +250,10 @@ func GetYamlSimpleK8s() (*SimpleK8s, error) {
 	// Unmarshal the yaml content
 	yamlSk8s, err := unmarshal(yamlContent)
 	if err != nil {
+		log.Error(err)
 		return nil, err
 	}
+	log.WithField("yamlSk8s", yamlSk8s).Info()
 
-	log.WithField("GetYamlSimpleK8s", yamlSk8s).Info()
 	return yamlSk8s, nil
 }
