@@ -5,10 +5,9 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	"syscall"
 	"text/template"
 
 	log "github.com/sirupsen/logrus"
@@ -162,20 +161,9 @@ func CreateSymlink(path string, target string, overwrite bool, uid int, gid int,
 	return nil
 }
 
-func GetOwnUidGid() (uid int, gid int, err error) {
-	uid, gid = -1, -1
-	user, err := user.Current()
-	if err != nil {
-		return
-	}
-	uid, err = strconv.Atoi(user.Uid)
-	if err != nil {
-		return
-	}
-	gid, err = strconv.Atoi(user.Gid)
-	if err != nil {
-		return
-	}
+func GetOwnUidGid() (uid int, gid int) {
+	uid = syscall.Getuid()
+	gid = syscall.Getuid()
 	return
 }
 

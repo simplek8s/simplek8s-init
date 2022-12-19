@@ -391,10 +391,7 @@ func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
 
 		// Set UID and GID from own process by default
-		defaultUid, defaultGid, err := common.GetOwnUidGid()
-		if err != nil {
-			return err
-		}
+		defaultUid, defaultGid := common.GetOwnUidGid()
 
 		for _, link := range simpleK8s.Storage.Links {
 			uid := defaultUid
@@ -440,10 +437,7 @@ func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
 
 		// Set UID and GID from own process by default
-		defaultUid, defaultGid, err := common.GetOwnUidGid()
-		if err != nil {
-			return err
-		}
+		defaultUid, defaultGid := common.GetOwnUidGid()
 
 		for _, directory := range simpleK8s.Storage.Directories {
 			isOverwrite := getBoolByDefault(directory.Overwrite, false)
@@ -496,10 +490,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 	if simpleK8s.Storage != nil {
 
 		// Set UID and GID from own process by default
-		defaultUid, defaultGid, err := common.GetOwnUidGid()
-		if err != nil {
-			return err
-		}
+		defaultUid, defaultGid := common.GetOwnUidGid()
 
 		for _, file := range simpleK8s.Storage.Files {
 			filename := file.Path
