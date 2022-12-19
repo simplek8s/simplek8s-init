@@ -3,7 +3,6 @@ package systemdGenerator
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	sr "github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/initrd"
@@ -32,29 +31,29 @@ func CmdSystemdGenerator(generatorDir string, earlyDir string, lateDir string) e
 		return fmt.Errorf("%q is not a directory", generatorDir)
 	}
 
-	sr, err := sr.New("/")
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
 	// We could be executed by initrd or by sysroot
 	if isStageInitrd() {
-		if err := initrd.CmdSystemdGeneratorInitrd(sr, generatorDir); err != nil {
+		if err := initrd.CmdSystemdGeneratorInitrd(generatorDir); err != nil {
 			log.Error(err)
 			return err
 		}
 	} else {
+		sr, err := sr.New("/")
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+
 		if err := sysroot.CmdSystemdGeneratorSysroot(sr, generatorDir); err != nil {
 			log.Error(err)
 			return err
 		}
-	}
 
-	// Commit sysroot
-	if err := sr.Write(); err != nil {
-		log.Error(err)
-		return err
+		// Commit sysroot
+		if err := sr.Write(); err != nil {
+			log.Error(err)
+			return err
+		}
 	}
 
 	return nil

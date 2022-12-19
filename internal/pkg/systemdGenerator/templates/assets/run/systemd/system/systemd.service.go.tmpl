@@ -3,16 +3,25 @@
 {{- if .Description }}
 Description={{ .Description }}
 {{- end }}
+{{- range .BindsTo }}
+BindsTo={{ . }}
+{{- end }}
+{{- range .Conflicts }}
+Conflicts={{ . }}
+{{- end }}
 {{- range .Before }}
 Before={{ . }}
 {{- end }}
 {{- range .After }}
 After={{ . }}
 {{- end }}
+{{- range .Requires }}
+Requires={{ . }}
+{{- end }}
 {{- range .ConditionPathExists }}
 ConditionPathExists={{ . }}
 {{- end }}
-DefaultDependencies=no
+DefaultDependencies={{ if .DefaultDependencies }}yes{{ else }}no{{ end }}
 
 [Service]
 Type={{ .Type }}
