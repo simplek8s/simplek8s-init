@@ -152,10 +152,7 @@ func TestCopyDir(t *testing.T) {
 		dst := t.TempDir()
 		t.Logf("dst: %v", dst)
 
-		uid, gid, err := common.GetOwnUidGid()
-		if err != nil {
-			t.Fatal(err)
-		}
+		uid, gid := common.GetOwnUidGid()
 
 		if err := CopyDir(src.dirname, dst, &CopyOptions{
 			Exclude: []*regexp.Regexp{
@@ -207,10 +204,7 @@ func TestCopyDir(t *testing.T) {
 			},
 		}
 
-		uid, gid, err := common.GetOwnUidGid()
-		if err != nil {
-			t.Fatal(err)
-		}
+		uid, gid := common.GetOwnUidGid()
 
 		if err := CopyDir("test_assets", dst, &CopyOptions{
 			Fsys:     test_assets,
