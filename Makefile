@@ -13,6 +13,7 @@ build_mkdir_dir:
 build_x86-64: build_mkdir_dir
 	GOOS=linux GOARCH=amd64 \
 		go build \
+			-trimpath \
 			-ldflags="${LDFLAGS}" \
 			-o "${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.x86-64" \
 			cmd/init/main.go
@@ -21,6 +22,7 @@ build_x86-64: build_mkdir_dir
 build_arm64: build_mkdir_dir
 	GOOS=linux GOARCH=arm64 \
 		go build \
+			-trimpath \
 			-ldflags="${LDFLAGS}" \
 			-o "${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.arm64" \
 			cmd/init/main.go
