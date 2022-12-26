@@ -313,6 +313,9 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
 }
 
 func getUidByName(users []passwd.User, name string) *int {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for _, user := range users {
 		if user.Name == name {
 			return &user.Uid
@@ -326,6 +329,9 @@ func getUidByName(users []passwd.User, name string) *int {
 }
 
 func getGidByName(groups []passwd.Group, name string) *int {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for _, group := range groups {
 		if group.Name == name {
 			return &group.Gid
@@ -339,6 +345,9 @@ func getGidByName(groups []passwd.Group, name string) *int {
 }
 
 func getUidGidFromString(permission string, groups []passwd.Group, users []passwd.User) (int, int) {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	uid := 0
 	gid := 0
 
@@ -364,6 +373,9 @@ func getUidGidFromString(permission string, groups []passwd.Group, users []passw
 }
 
 func getBoolByDefault(pointer *bool, fallback bool) bool {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	if pointer != nil {
 		return *pointer
 	}
@@ -371,6 +383,9 @@ func getBoolByDefault(pointer *bool, fallback bool) bool {
 }
 
 func updateOrAppendLink(links []Link, link Link) []Link {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for i, l := range links {
 		if l.Path == link.Path {
 			// Replace
@@ -417,6 +432,9 @@ func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
 }
 
 func updateOrAppendDirectory(directories []Directory, directory Directory) []Directory {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for i, d := range directories {
 		if d.Path == directory.Path {
 			// Replace
@@ -470,6 +488,9 @@ func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
 }
 
 func updateOrAppendFile(files []File, file File) []File {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for i, d := range files {
 		if d.Filename == file.Filename {
 			// Replace
@@ -540,6 +561,9 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 }
 
 func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.SimpleK8s) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
 	}).Debug("start")
@@ -573,6 +597,9 @@ func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.SimpleK8s) error {
 }
 
 func parseEachLineFromFilename(filename string, eachLineFunc func(line string) error) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	file, err := os.Open(filename)
 	if err != nil {
 		log.WithField("filename", filename).Error(err)
@@ -591,6 +618,9 @@ func parseEachLineFromFilename(filename string, eachLineFunc func(line string) e
 }
 
 func (sysroot *Sysroot) parseFilenameShadow(filename string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	return parseEachLineFromFilename(filename, func(line string) error {
 		shadow := passwd.Shadow{}
 		if err := passwd.UnmarshalShadow(line, &shadow); err != nil {
@@ -606,6 +636,9 @@ func (sysroot *Sysroot) parseFilenameShadow(filename string) error {
 }
 
 func (sysroot *Sysroot) parseFilenameGroup(filename string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	return parseEachLineFromFilename(filename, func(line string) error {
 		group := passwd.Group{}
 		if err := passwd.UnmarshalGroup(line, &group); err != nil {
@@ -621,6 +654,9 @@ func (sysroot *Sysroot) parseFilenameGroup(filename string) error {
 }
 
 func (sysroot *Sysroot) parseFilenamePasswd(filename string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	return parseEachLineFromFilename(filename, func(line string) error {
 		user := passwd.User{}
 		if err := passwd.UnmarshalUser(line, &user); err != nil {
@@ -636,6 +672,9 @@ func (sysroot *Sysroot) parseFilenamePasswd(filename string) error {
 }
 
 func (sysroot *Sysroot) FeedByCurrentFiles() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	var filename string
 
 	filename = sysroot.Path + "/etc/shadow"
@@ -666,6 +705,9 @@ func (sysroot *Sysroot) FeedByCurrentFiles() error {
 }
 
 func writeFile(filename string, content []byte, mode fs.FileMode, uid int, gid int) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	path := filepath.Dir(filename)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return err
@@ -680,6 +722,9 @@ func writeFile(filename string, content []byte, mode fs.FileMode, uid int, gid i
 }
 
 func (sr *Sysroot) writeShadow() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	if len(sr.Shadows) == 0 {
 		return nil
 	}
@@ -698,6 +743,9 @@ func (sr *Sysroot) writeShadow() error {
 }
 
 func (sr *Sysroot) writeGroups() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	if len(sr.Groups) == 0 {
 		return nil
 	}
@@ -716,6 +764,9 @@ func (sr *Sysroot) writeGroups() error {
 }
 
 func (sr *Sysroot) writeUsers() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	if len(sr.Users) == 0 {
 		return nil
 	}
@@ -734,6 +785,9 @@ func (sr *Sysroot) writeUsers() error {
 }
 
 func (sysroot *Sysroot) writeLinks() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for _, link := range sysroot.Links {
 		if err := common.CreateSymlink(
 			link.Path,
@@ -750,6 +804,9 @@ func (sysroot *Sysroot) writeLinks() error {
 }
 
 func (sysroot *Sysroot) writeDirectories() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for _, directory := range sysroot.Directories {
 		if err := os.MkdirAll(sysroot.Path+directory.Path, directory.Mode); err != nil {
 			return err
@@ -762,6 +819,9 @@ func (sysroot *Sysroot) writeDirectories() error {
 }
 
 func (sysroot *Sysroot) writeFiles() error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for _, file := range sysroot.Files {
 		filename := sysroot.Path + file.Filename
 
@@ -814,6 +874,9 @@ func (sysroot *Sysroot) Write() error {
 }
 
 func New(path string) (*Sysroot, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	if !common.IsDir(path) {
 		return nil, fmt.Errorf("%q is not a directory", path)
 	}
