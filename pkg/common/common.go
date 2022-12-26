@@ -175,7 +175,7 @@ func isCmdlineDebug(filePath string) bool {
 	log.WithField("filePath", filePath).Debug("start")
 	defer log.Debug("end")
 
-	re := regexp.MustCompile(`\s*debug\s*`)
+	re := regexp.MustCompile(`(?i)\s*debug\s*`)
 
 	if cmdlineContent, err := os.ReadFile(filePath); err != nil {
 		log.Warn(err)
