@@ -729,8 +729,6 @@ func (sr *Sysroot) writeShadow() error {
 		return nil
 	}
 
-	filename := sr.Path + "/etc/shadow"
-	mode := fs.FileMode(0600)
 	content := ""
 	for _, shadow := range sr.Shadows {
 		if line, err := shadow.Marshal(); err != nil {
@@ -739,6 +737,9 @@ func (sr *Sysroot) writeShadow() error {
 			content += fmt.Sprintln(line)
 		}
 	}
+
+	filename := sr.Path + "/etc/shadow"
+	mode := fs.FileMode(0600)
 	return writeFile(filename, []byte(content), mode, 0, 0)
 }
 

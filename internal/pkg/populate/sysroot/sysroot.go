@@ -229,7 +229,7 @@ func CmdPopulateSysroot(output string) error {
 		log.WithField("output", output).Error(err)
 		return err
 	}
-	allowRootPassword := yamlSimpleK8s == nil
+	sshAllowRootPassword := yamlSimpleK8s == nil
 	generateRootPassword := yamlSimpleK8s == nil
 
 	sr, err := sysroot.New(output)
@@ -240,11 +240,11 @@ func CmdPopulateSysroot(output string) error {
 		return err
 	}
 
-	if err := populateSysrootSshd(output, sr, allowRootPassword); err != nil {
+	if err := populateSysrootSshd(output, sr, sshAllowRootPassword); err != nil {
 		log.WithFields(log.Fields{
-			"output":            output,
-			"sr":                sr,
-			"allowRootPassword": allowRootPassword,
+			"output":               output,
+			"sr":                   sr,
+			"sshAllowRootPassword": sshAllowRootPassword,
 		}).Error(err)
 		return err
 	}
