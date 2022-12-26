@@ -3,7 +3,7 @@ module github.com/jlsalvador/simplek8s
 go 1.19
 
 require (
-	github.com/brianvoe/gofakeit/v6 v6.19.0
+	github.com/brianvoe/gofakeit/v6 v6.20.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/diskfs/go-diskfs v1.2.0
 	github.com/openlyinc/pointy v1.2.0
