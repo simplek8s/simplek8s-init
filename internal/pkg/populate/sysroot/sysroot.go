@@ -100,7 +100,7 @@ func populateSysrootUsers(output string, sr *sysroot.Sysroot, generateRootPasswo
 	defer log.Debug("end")
 
 	// Lets set the "root" password
-	pwdHashed := "!!"
+	pwdHashed := "x"
 	if generateRootPassword {
 		// Generate a random "root" password
 		var pwdPlain string
