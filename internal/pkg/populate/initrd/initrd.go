@@ -60,9 +60,15 @@ func populateInitrdWithFiles(output string) error {
 		}
 	}
 
-	// Creates `/usr/local` directory because the future mount point `/usr`
+	// Creates the `usr/local` directory because the future mount point `/usr`
 	// will be Read-Only, so `/usr/local` must be created before.
 	if err := os.MkdirAll(filepath.Join(output, "/usr/local"), 0755); err != nil {
+		log.Error(err)
+		return err
+	}
+	// Creates the `tmp` directory because systemd >=253 does not create this
+	// directory before hand.
+	if err := os.MkdirAll(filepath.Join(output, "/tmp"), 1777); err != nil {
 		log.Error(err)
 		return err
 	}
