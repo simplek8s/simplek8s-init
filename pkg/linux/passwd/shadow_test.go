@@ -1,3 +1,5 @@
+// Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+
 package passwd
 
 import (
