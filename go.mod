@@ -5,11 +5,11 @@ go 1.19
 require (
 	github.com/brianvoe/gofakeit/v6 v6.20.1
 	github.com/coreos/go-systemd/v22 v22.5.0
-	github.com/diskfs/go-diskfs v1.2.0
+	github.com/diskfs/go-diskfs v1.3.0
 	github.com/openlyinc/pointy v1.2.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/tredoe/osutil v1.0.6
-	golang.org/x/sys v0.3.0
+	golang.org/x/sys v0.5.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
