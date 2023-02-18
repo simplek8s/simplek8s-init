@@ -14,6 +14,10 @@ type User struct {
 	// letters.
 	Name string
 	// Could be ``, `*`, `!`, or `x`
+	//  -  ``: The user can login without password.
+	//  - `*`: The user can not login, but its account can run process.
+	//  - `!`: The user is locked.
+	//  - `x`: The user password is stored in /etc/shadow
 	Password string
 	Uid      int
 	Gid      int
@@ -24,6 +28,8 @@ type User struct {
 
 func NewUser(user User) User {
 	if user.Home == "" {
+		// A better approach could be `/var/empty`, but because legacy reasons,
+		// a system user uses `/` as the default home.
 		user.Home = "/"
 	}
 	if user.Shell == "" {

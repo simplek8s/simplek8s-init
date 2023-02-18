@@ -245,14 +245,14 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
 			}
 		}
 
-		passwdUser := passwd.User{
+		passwdUser := passwd.NewUser(passwd.User{
 			Name:     user.Name,
 			Password: "x",
 			Uid:      uid,
 			Gid:      gid,
 			Home:     home,
 			Shell:    shell,
-		}
+		})
 		sysroot.Users = updateOrAppendUser(sysroot.Users, passwdUser)
 
 		// Update shadow instance
