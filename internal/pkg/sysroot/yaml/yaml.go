@@ -117,7 +117,7 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 	for _, blockDevice := range blockDevices {
 		log.WithField("device", blockDevice).Debug()
 
-		disk, err := diskfs.OpenWithMode(blockDevice, diskfs.ReadOnly)
+		disk, err := diskfs.Open(blockDevice, diskfs.WithOpenMode(diskfs.ReadOnly))
 		if err != nil {
 			log.WithField("diskErr", err).Debug()
 			continue
