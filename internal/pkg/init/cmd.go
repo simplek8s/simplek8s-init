@@ -8,8 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/coreos/go-systemd/v22/unit"
+	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/templates"
 	"github.com/jlsalvador/simplek8s/pkg/common"
@@ -266,55 +269,87 @@ func getUnitsByDefault() (SystemdUnitsTmpl, error) {
 	return units, nil
 }
 
-func getYamlUnits(defaultUnits SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
+var reIpV4 = regexp.MustCompile(`^((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.?){4})`)
+var reIpV6 = regexp.MustCompile(`(?m)^([[:xdigit:]]{1,4}(?::[[:xdigit:]]{1,4}){7}|::|:(?::[[:xdigit:]]{1,4}){1,6}|[[:xdigit:]]{1,4}:(?::[[:xdigit:]]{1,4}){1,5}|(?:[[:xdigit:]]{1,4}:){2}(?::[[:xdigit:]]{1,4}){1,4}|(?:[[:xdigit:]]{1,4}:){3}(?::[[:xdigit:]]{1,4}){1,3}|(?:[[:xdigit:]]{1,4}:){4}(?::[[:xdigit:]]{1,4}){1,2}|(?:[[:xdigit:]]{1,4}:){5}:[[:xdigit:]]{1,4}|(?:[[:xdigit:]]{1,4}:){1,6}:)`)
+
+func getUnitsFromYaml(yamlSimpleK8s *yaml.SimpleK8s, defaultUnits SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
 	units := defaultUnits
 
-	if yamlSimpleK8s, err := yaml.GetYamlSimpleK8s(); err != nil {
-		log.Error(err)
-		return nil, err
-	} else if yamlSimpleK8s != nil && yamlSimpleK8s.Storage != nil && yamlSimpleK8s.Storage.Mounts != nil {
+	if yamlSimpleK8s != nil && yamlSimpleK8s.Storage != nil && yamlSimpleK8s.Storage.Mounts != nil {
 		log.WithField("mounts", yamlSimpleK8s.Storage.Mounts).Debug()
 		for _, mount := range yamlSimpleK8s.Storage.Mounts {
 
-			// patch `where` because switch root to sysroot
 			where := mount.Where
-			if string([]rune(where)[0:1]) == "/" {
-				where = filepath.Join("/sysroot", where)
+			if string([]rune(mount.Where)[0:1]) == "/" {
+				// Patch `where` because switch root to sysroot
+				where = filepath.Join("/sysroot", mount.Where)
 			}
 
-			escapedWhat := unit.UnitNamePathEscape(mount.What)
 			escapedWhere := unit.UnitNamePathEscape(where)
 			unitName := fmt.Sprintf("%s.mount", escapedWhere)
-
-			// if `what` is a device, binds mount unit to this device
+			escapedWhat := unit.UnitNamePathEscape(mount.What)
+			defaultDependencies := false
+			requires := []string{}
 			bindsTo := []string{}
+			before := []string{"initrd-root-fs.target", "shutdown.target"}
+			after := []string{fmt.Sprintf("blockdev@%s.target", escapedWhat)}
+			mType := "auto"
+			options := "defaults"
+
+			// Check `mount.What` in order to patch other fields
 			if string([]rune(mount.What)[0:1]) == "/" {
-				bindsTo = []string{fmt.Sprintf("%s.device", escapedWhat)}
+				// If `what` is a device, binds mount unit to this device
+				bindsTo = append(bindsTo, fmt.Sprintf("%s.device", escapedWhat))
+			} else if reIpV4.MatchString(mount.What) || reIpV6.MatchString(mount.What) {
+				// // Requires network if `mount.What` is an address
+				// requires = append(requires, "systemd-networkd.service")
+				// after = append(after, "systemd-networkd.service")
+
+				// In order to boot from a network device, we need to setup the
+				// interfaces, so we'll start `systemd-networkd.service` before
+				// `sysroot.mount` and we'll stop it before switch to `/sysroot`.
+				//
+				// - Start systemd-networkd before "sysroot.mount".
+				// - Stop systemd-networkd with the same requirements that starts `simplek8s-populate-sysroot.service`
+				units["simplek8s-temporal-systemd-networkd.service"] = struct {
+					tmplName string
+					tmplData any
+				}{
+					"assets/run/systemd/system/systemd.service.go.tmpl",
+					templates.TmplDataSystemdUnitService{
+						DefaultDependencies: false,
+						Description:         "Temporal systemd-networkd",
+						Conflicts:           []string{"shutdown.target"},
+						Before:              []string{"initrd-root-fs.target", "shutdown.target", "sysroot.mount"},
+						Type:                "oneshot",
+						Restart:             "on-failure",
+						RemainAfterExit:     true,
+						ExecStart: []string{
+							"/usr/bin/systemctl restart systemd-networkd",
+							"/usr/lib/systemd/systemd-networkd-wait-online --timeout=60",
+							"/usr/bin/systemctl stop systemd-networkd.service systemd-networkd.socket",
+						},
+					},
+				}
 			}
 
-			mType := "auto"
 			if mount.Type != nil {
 				mType = *mount.Type
 			}
 
-			options := "defaults"
 			if mount.Options != nil {
 				options = *mount.Options
 			}
 
-			defaultDependencies := false
-			before := []string{"initrd-root-fs.target", "shutdown.target"}
-			after := []string{fmt.Sprintf("blockdev@%s.target", escapedWhat)}
-			requires := []string{}
 			if v, ok := defaultUnits[unitName]; ok {
 				if v, ok := v.tmplData.(templates.TmplDataSystemdUnitMount); ok {
 					defaultDependencies = v.DefaultDependencies
-					before = v.Before
-					after = v.After
-					requires = v.Requires
+					before = append(before, v.Before...)
+					after = append(after, v.After...)
+					requires = append(requires, v.Requires...)
 				}
 			}
 
@@ -341,6 +376,35 @@ func getYamlUnits(defaultUnits SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
 	return units, nil
 }
 
+func createSystemdNetworkFilesFromYaml(yamlSimpleK8s *yaml.SimpleK8s, units SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	if yamlSimpleK8s != nil && yamlSimpleK8s.Storage != nil && yamlSimpleK8s.Storage.Files != nil {
+		p := "/etc/systemd/network/"
+		if err := os.MkdirAll(p, 0644); err != nil {
+			log.Error(err)
+			return units, err
+		}
+		for _, file := range yamlSimpleK8s.Storage.Files {
+			if strings.HasPrefix(file.Path, p) {
+				b := sysroot.GetBytesFromEncoding(file.Encoding, file.Content)
+				log.WithFields(log.Fields{
+					"path":     file.Path,
+					"encoding": file.Encoding,
+					"content":  file.Content,
+					"bytes":    b,
+				}).Debug("write file")
+				if err := os.WriteFile(file.Path, b, 0644); err != nil {
+					log.Error(err)
+					return units, err
+				}
+			}
+		}
+	}
+	return units, nil
+}
+
 func Cmd(args []string) error {
 	log.WithFields(log.Fields{
 		"args": args,
@@ -348,15 +412,20 @@ func Cmd(args []string) error {
 	defer log.Debug("end")
 
 	var units SystemdUnitsTmpl
+	var err error
 
-	if defaultUnits, err := getUnitsByDefault(); err != nil {
+	if units, err = getUnitsByDefault(); err != nil {
 		log.Error(err)
 		return err
-	} else {
-		if units, err = getYamlUnits(defaultUnits); err != nil {
-			log.Error(err)
-			return err
-		}
+	} else if yamlSimpleK8s, err := yaml.GetYamlSimpleK8s(); err != nil {
+		log.Error(err)
+		return err
+	} else if units, err = getUnitsFromYaml(yamlSimpleK8s, units); err != nil {
+		log.Error(err)
+		return err
+	} else if units, err = createSystemdNetworkFilesFromYaml(yamlSimpleK8s, units); err != nil {
+		log.Error(err)
+		return err
 	}
 	log.WithField("units", units).Debug()
 
