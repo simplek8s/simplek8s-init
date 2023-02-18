@@ -18,6 +18,83 @@ import (
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
 
+// The users that any OS with systemd must have.
+var defaultUsers = []passwd.User{
+	passwd.NewUser(passwd.User{
+		Name:  "root",
+		Uid:   0,
+		Gid:   0,
+		Gecos: []string{"Super User"},
+		Home:  "/root",
+		Shell: "/usr/bin/sh",
+	}),
+	passwd.NewUser(passwd.User{
+		Name:  "nobody",
+		Uid:   65534,
+		Gid:   65534,
+		Gecos: []string{"Nobody"},
+	}),
+	passwd.NewUser(passwd.User{
+		Name:  "dbus",
+		Uid:   982,
+		Gid:   982,
+		Gecos: []string{"System Message Bus"},
+	}),
+	passwd.NewUser(passwd.User{
+		Name:  "sshd",
+		Uid:   981,
+		Gid:   981,
+		Gecos: []string{"SSH drop priv user"},
+		Home:  "/var/empty",
+	}),
+	passwd.NewUser(passwd.User{
+		Name:  "systemd-network",
+		Uid:   980,
+		Gid:   980,
+		Gecos: []string{"systemd Network Management"},
+	}),
+	passwd.NewUser(passwd.User{
+		Name:  "systemd-resolve",
+		Uid:   979,
+		Gid:   979,
+		Gecos: []string{"systemd Resolver"},
+	}),
+	passwd.NewUser(passwd.User{
+		Name:  "systemd-timesync",
+		Uid:   978,
+		Gid:   978,
+		Gecos: []string{"systemd Time Synchronization"},
+	}),
+}
+
+var defaultGroups = []passwd.Group{
+	passwd.NewGroup(passwd.Group{Name: "root", Gid: 0}),
+	passwd.NewGroup(passwd.Group{Name: "nobody", Gid: 65534}),
+	passwd.NewGroup(passwd.Group{Name: "adm", Gid: 999}),
+	passwd.NewGroup(passwd.Group{Name: "wheel", Gid: 998}),
+	passwd.NewGroup(passwd.Group{Name: "utmp", Gid: 997}),
+	passwd.NewGroup(passwd.Group{Name: "audio", Gid: 996}),
+	passwd.NewGroup(passwd.Group{Name: "cdrom", Gid: 995}),
+	passwd.NewGroup(passwd.Group{Name: "dialout", Gid: 994}),
+	passwd.NewGroup(passwd.Group{Name: "disk", Gid: 993}),
+	passwd.NewGroup(passwd.Group{Name: "input", Gid: 992}),
+	passwd.NewGroup(passwd.Group{Name: "kmem", Gid: 991}),
+	passwd.NewGroup(passwd.Group{Name: "kvm", Gid: 990}),
+	passwd.NewGroup(passwd.Group{Name: "lp", Gid: 989}),
+	passwd.NewGroup(passwd.Group{Name: "render", Gid: 988}),
+	passwd.NewGroup(passwd.Group{Name: "sgx", Gid: 987}),
+	passwd.NewGroup(passwd.Group{Name: "tape", Gid: 986}),
+	passwd.NewGroup(passwd.Group{Name: "tty", Gid: 5}),
+	passwd.NewGroup(passwd.Group{Name: "video", Gid: 985}),
+	passwd.NewGroup(passwd.Group{Name: "users", Gid: 984}),
+	passwd.NewGroup(passwd.Group{Name: "systemd-journal", Gid: 983}),
+	passwd.NewGroup(passwd.Group{Name: "dbus", Gid: 982}),
+	passwd.NewGroup(passwd.Group{Name: "sshd", Gid: 981}),
+	passwd.NewGroup(passwd.Group{Name: "systemd-network", Gid: 980}),
+	passwd.NewGroup(passwd.Group{Name: "systemd-resolve", Gid: 979}),
+	passwd.NewGroup(passwd.Group{Name: "systemd-timesync", Gid: 978}),
+}
+
 // Configure "/usr/share/factory/etc/ssh/sshd_config"
 func populateSysrootSshd(output string, sr *sysroot.Sysroot, allowRootPassword bool) error {
 	log.WithFields(log.Fields{
@@ -131,91 +208,25 @@ func populateSysrootUsers(output string, sr *sysroot.Sysroot, generateRootPasswo
 		}
 	}
 
-	sr.Shadows = append(sr.Shadows,
-		passwd.NewShadow(passwd.Shadow{Name: "root", Password: pwdHashed}),
-		passwd.NewShadow(passwd.Shadow{Name: "nobody"}),
-		passwd.NewShadow(passwd.Shadow{Name: "dbus"}),
-		passwd.NewShadow(passwd.Shadow{Name: "sshd"}),
-		passwd.NewShadow(passwd.Shadow{Name: "systemd-network"}),
-		passwd.NewShadow(passwd.Shadow{Name: "systemd-resolve"}),
-		passwd.NewShadow(passwd.Shadow{Name: "systemd-timesync"}),
-	)
+	// Generate shadows by `defaultUsers`, but with a `root` hashed password
+	for _, user := range defaultUsers {
+		var shadow passwd.Shadow
+		if user.Name == "root" {
+			shadow = passwd.NewShadow(passwd.Shadow{
+				Name:     "root",
+				Password: pwdHashed,
+			})
+		} else {
+			shadow = passwd.NewShadow(passwd.Shadow{Name: user.Name})
+		}
+		sr.Shadows = append(sr.Shadows, shadow)
+	}
 
-	sr.Groups = append(sr.Groups,
-		passwd.Group{Name: "root", Gid: 0},
-		passwd.NewGroup(passwd.Group{Name: "nobody", Gid: 65534}),
-		passwd.NewGroup(passwd.Group{Name: "adm", Gid: 999}),
-		passwd.NewGroup(passwd.Group{Name: "wheel", Gid: 998}),
-		passwd.NewGroup(passwd.Group{Name: "utmp", Gid: 997}),
-		passwd.NewGroup(passwd.Group{Name: "audio", Gid: 996}),
-		passwd.NewGroup(passwd.Group{Name: "cdrom", Gid: 995}),
-		passwd.NewGroup(passwd.Group{Name: "dialout", Gid: 994}),
-		passwd.NewGroup(passwd.Group{Name: "disk", Gid: 993}),
-		passwd.NewGroup(passwd.Group{Name: "input", Gid: 992}),
-		passwd.NewGroup(passwd.Group{Name: "kmem", Gid: 991}),
-		passwd.NewGroup(passwd.Group{Name: "kvm", Gid: 990}),
-		passwd.NewGroup(passwd.Group{Name: "lp", Gid: 989}),
-		passwd.NewGroup(passwd.Group{Name: "render", Gid: 988}),
-		passwd.NewGroup(passwd.Group{Name: "sgx", Gid: 987}),
-		passwd.NewGroup(passwd.Group{Name: "tape", Gid: 986}),
-		passwd.NewGroup(passwd.Group{Name: "tty", Gid: 5}),
-		passwd.NewGroup(passwd.Group{Name: "video", Gid: 985}),
-		passwd.NewGroup(passwd.Group{Name: "users", Gid: 984}),
-		passwd.NewGroup(passwd.Group{Name: "systemd-journal", Gid: 983}),
-		passwd.NewGroup(passwd.Group{Name: "dbus", Gid: 982}),
-		passwd.NewGroup(passwd.Group{Name: "sshd", Gid: 981}),
-		passwd.NewGroup(passwd.Group{Name: "systemd-network", Gid: 980}),
-		passwd.NewGroup(passwd.Group{Name: "systemd-resolve", Gid: 979}),
-		passwd.NewGroup(passwd.Group{Name: "systemd-timesync", Gid: 978}),
-	)
+	// Fill default groups
+	sr.Groups = append(sr.Groups, defaultGroups...)
 
-	sr.Users = append(sr.Users,
-		passwd.NewUser(passwd.User{
-			Name:  "root",
-			Uid:   0,
-			Gid:   0,
-			Gecos: []string{"Super User"},
-			Home:  "/root",
-			Shell: "/usr/bin/sh",
-		}),
-		passwd.NewUser(passwd.User{
-			Name:  "nobody",
-			Uid:   65534,
-			Gid:   65534,
-			Gecos: []string{"Nobody"},
-		}),
-		passwd.NewUser(passwd.User{
-			Name:  "dbus",
-			Uid:   982,
-			Gid:   982,
-			Gecos: []string{"System Message Bus"},
-		}),
-		passwd.NewUser(passwd.User{
-			Name:  "sshd",
-			Uid:   981,
-			Gid:   981,
-			Gecos: []string{"SSH drop priv user"},
-			Home:  "/var/empty",
-		}),
-		passwd.NewUser(passwd.User{
-			Name:  "systemd-network",
-			Uid:   980,
-			Gid:   980,
-			Gecos: []string{"systemd Network Management"},
-		}),
-		passwd.NewUser(passwd.User{
-			Name:  "systemd-resolve",
-			Uid:   979,
-			Gid:   979,
-			Gecos: []string{"systemd Resolver"},
-		}),
-		passwd.NewUser(passwd.User{
-			Name:  "systemd-timesync",
-			Uid:   978,
-			Gid:   978,
-			Gecos: []string{"systemd Time Synchronization"},
-		}),
-	)
+	// Fill default users
+	sr.Users = append(sr.Users, defaultUsers...)
 
 	return nil
 }
