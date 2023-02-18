@@ -32,3 +32,6 @@ RemainAfterExit={{ if .RemainAfterExit }}yes{{ else }}no{{ end }}
 {{- range .ExecStart }}
 ExecStart={{ . }}
 {{- end }}
+{{- range .ExecStop }}
+ExecStop={{ . }}
+{{- end }}

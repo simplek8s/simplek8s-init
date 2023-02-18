@@ -504,6 +504,22 @@ func updateOrAppendFile(files []File, file File) []File {
 	return append(files, file)
 }
 
+// TODO:
+//   - Fetch from HTTP when encoding is http
+//   - Fetch from HTTPS when encoding is https
+func GetBytesFromEncoding(encoding *string, content *string) []byte {
+	if content != nil {
+		if encoding != nil && *encoding == "b64" {
+			if c, err := base64.StdEncoding.DecodeString(*content); err == nil {
+				return c
+			}
+		} else {
+			return []byte(*content)
+		}
+	}
+	return []byte{}
+}
+
 func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
@@ -535,19 +551,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 				}
 			}
 
-			content := []byte{}
-			if file.Content != nil {
-				if file.Encoding != nil && *file.Encoding == "b64" {
-					var err error
-					content, err = base64.StdEncoding.DecodeString(*file.Content)
-					if err != nil {
-						log.Error(err)
-						return err
-					}
-				} else {
-					content = []byte(*file.Content)
-				}
-			}
+			content := GetBytesFromEncoding(file.Encoding, file.Content)
 
 			sysroot.Files = updateOrAppendFile(sysroot.Files, File{
 				Overwrite: isOverwrite,

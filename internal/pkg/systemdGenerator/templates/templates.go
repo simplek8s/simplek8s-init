@@ -28,6 +28,7 @@ type TmplDataSystemdUnitService struct {
 	Restart             string
 	RemainAfterExit     bool
 	ExecStart           []string
+	ExecStop            []string
 }
 
 //go:embed assets/*
