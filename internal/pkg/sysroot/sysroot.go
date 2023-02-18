@@ -219,8 +219,8 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
 	for _, user := range simpleK8s.Users {
 		isSystem := getBoolByDefault(user.System, false)
 
-		home := "/var/empty"
-		shell := "/bin/false"
+		home := "" // Default value from `NewUser()`
+		shell := "" // Default value from `NewUser()`
 		uid := 0
 		gid := 0
 		if user.Name == "root" {

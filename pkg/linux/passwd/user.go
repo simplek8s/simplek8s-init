@@ -32,8 +32,9 @@ func NewUser(user User) User {
 		// a system user uses `/` as the default home.
 		user.Home = "/"
 	}
+	// Not login by default
 	if user.Shell == "" {
-		user.Shell = "/bin/false"
+		user.Shell = "/usr/sbin/nologin"
 	}
 	return user
 }
