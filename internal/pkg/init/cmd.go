@@ -9,10 +9,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
+
+	//"strings"
 
 	"github.com/coreos/go-systemd/v22/unit"
-	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
+	//"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/templates"
 	"github.com/jlsalvador/simplek8s/pkg/common"
@@ -303,6 +304,7 @@ func getUnitsFromYaml(yamlSimpleK8s *yaml.SimpleK8s, defaultUnits SystemdUnitsTm
 			if string([]rune(mount.What)[0:1]) == "/" {
 				// If `what` is a device, binds mount unit to this device
 				bindsTo = append(bindsTo, fmt.Sprintf("%s.device", escapedWhat))
+			/*
 			} else if reIpV4.MatchString(mount.What) || reIpV6.MatchString(mount.What) {
 				// // Requires network if `mount.What` is an address
 				// requires = append(requires, "systemd-networkd.service")
@@ -334,6 +336,7 @@ func getUnitsFromYaml(yamlSimpleK8s *yaml.SimpleK8s, defaultUnits SystemdUnitsTm
 						},
 					},
 				}
+			*/
 			}
 
 			if mount.Type != nil {
@@ -376,6 +379,7 @@ func getUnitsFromYaml(yamlSimpleK8s *yaml.SimpleK8s, defaultUnits SystemdUnitsTm
 	return units, nil
 }
 
+/*
 func createSystemdNetworkFilesFromYaml(yamlSimpleK8s *yaml.SimpleK8s, units SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
 	log.Debug("start")
 	defer log.Debug("end")
@@ -404,6 +408,7 @@ func createSystemdNetworkFilesFromYaml(yamlSimpleK8s *yaml.SimpleK8s, units Syst
 	}
 	return units, nil
 }
+*/
 
 func Cmd(args []string) error {
 	log.WithFields(log.Fields{
