@@ -81,7 +81,7 @@ func Test_getYamlContent(t *testing.T) {
 	tmpdir := t.TempDir()
 	diskFilename := filepath.Join(tmpdir, "disk.img")
 	diskSize := int64(1024 * 1024 * 100)
-	diskImage, err := diskfs.Create(diskFilename, diskSize, diskfs.Raw)
+	diskImage, err := diskfs.Create(diskFilename, diskSize, diskfs.Raw, diskfs.SectorSizeDefault)
 	if err != nil {
 		t.Fatal(err)
 	}
