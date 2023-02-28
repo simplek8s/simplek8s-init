@@ -423,9 +423,9 @@ func Cmd(args []string) error {
 	} else if units, err = getUnitsFromYaml(yamlSimpleK8s, units); err != nil {
 		log.Error(err)
 		return err
-	} else if units, err = createSystemdNetworkFilesFromYaml(yamlSimpleK8s, units); err != nil {
-		log.Error(err)
-		return err
+	//} else if units, err = createSystemdNetworkFilesFromYaml(yamlSimpleK8s, units); err != nil {
+	//	log.Error(err)
+	//	return err
 	}
 	log.WithField("units", units).Debug()
 
