@@ -26,21 +26,6 @@ func GetEnv(key, fallback string) string {
 	return fallback
 }
 
-func IsStringInList(value string, list []string) bool {
-	log.WithFields(log.Fields{
-		"value": value,
-		"list":  list,
-	}).Debug("start")
-	defer log.Debug("end")
-
-	for _, v := range list {
-		if value == v {
-			return true
-		}
-	}
-	return false
-}
-
 func IsDir(path string) bool {
 	log.WithFields(log.Fields{
 		"path": path,

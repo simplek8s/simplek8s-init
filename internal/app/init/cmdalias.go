@@ -3,6 +3,7 @@ package init
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	systemdGenerator "github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator"
 	"github.com/jlsalvador/simplek8s/pkg/common"
@@ -20,9 +21,9 @@ func IsCmdAlias(args []string) bool {
 
 	fullPathFilename := args[0]
 	got := filepath.Base(fullPathFilename)
-	return common.IsStringInList(got, []string{
+	return slices.Contains([]string{
 		CMDALIAS_GENERATOR,
-	})
+	}, got)
 }
 
 func isCmdAliasSystemdGenerator(args []string) bool {

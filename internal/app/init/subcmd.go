@@ -2,10 +2,10 @@ package init
 
 import (
 	"fmt"
+	"slices"
 
 	init2 "github.com/jlsalvador/simplek8s/internal/pkg/init"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate"
-	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,7 +28,7 @@ func IsSubcmd(args []string) bool {
 	if len(args) < 2 {
 		return false
 	}
-	return common.IsStringInList(args[1], SUBCOMMANDS)
+	return slices.Contains(SUBCOMMANDS, args[1])
 }
 
 func RunSubCommands(args []string) error {
