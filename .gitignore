@@ -1,4 +1,7 @@
+# Go
+/vendor
+/bin
 /build
 
-# IDEs
-/.vscode
+# IDE
+.vscode
