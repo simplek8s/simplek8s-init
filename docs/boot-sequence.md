@@ -1,7 +1,7 @@
 ```mermaid
 flowchart
   %% Legend
-  step[[step]] -- action --> proccess
+  step[[step]] -- action --> process
 
   subgraph a [initrd]
     initrd[[initrd]]
