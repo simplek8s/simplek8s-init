@@ -51,8 +51,8 @@ type Shadow struct {
 
 // Calculate how many days there are between now and 1970.
 func getNumberOfDaysFrom1970() int {
-	begining := time.Unix(0, 0)
-	diff := time.Since(begining)
+	beginning := time.Unix(0, 0)
+	diff := time.Since(beginning)
 	days := math.Ceil(diff.Hours() / 24)
 	return int(days)
 }
