@@ -1,66 +1,166 @@
 .DEFAULT_GOAL := build
 
-VERSION:=$(shell date --utc +%Y%m%d%H%M%S)
-export VERSION
-BUILD_DIR=./build
-BINARY=simplek8s-init
-PUBLISH_DEST=vbox1:/mnt/kubernetes/simplek8s-website-pvc-569e9642-8054-4213-a046-63af64297575/simplek8s-init
-LDFLAGS=-X main.Version=${VERSION} -extldflags=-static -w -s
+URL = https://publisher.simplek8s.org/upload/simplek8s-init
+GPG_FINGERPRINT = 33BAAC4BFB20C2327429730A9F16C69F2B9DD678
+TAGS ?= dev
 
-build_mkdir_dir:
-	mkdir -p "${BUILD_DIR}/dist/archive" "${BUILD_DIR}/dist/rolling"
+export BUILD_VERSION:=$(shell date --utc +%Y%m%d%H%M%S)
 
-build_x86-64: build_mkdir_dir
+NPROCS = $(shell grep -c 'processor' /proc/cpuinfo || printf 1)
+MAKEFLAGS += -j$(NPROCS)
+
+BUILD_DIR ?= $(shell pwd)/build
+LDFLAGS=\
+	-X main.Version=${BUILD_VERSION} \
+	-extldflags=-static -w -s
+
+BINARY_NAME=simplek8s-init
+ARCHITECTURES=x86-64 arm64
+GO_SOURCE=$(wildcard *.go)
+BINARIES=$(foreach ARCH, ${ARCHITECTURES}, ${BUILD_DIR}/${BINARY_NAME}.${BUILD_VERSION}.${ARCH})
+BINARIES_UPX=$(foreach BINARY, ${BINARIES}, ${BINARY}.upx)
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+GOCYCLO ?= $(LOCALBIN)/gocyclo
+MISSPELL ?= $(LOCALBIN)/misspell
+
+## Tool Versions
+GOCYCLO_VERSION ?= latest
+MISSPELL_VERSION ?= latest
+
+# Internal variables
+SPACE := $() $()
+COMMA := ,
+
+##@ General
+
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk command is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info on the usage of ANSI control characters for terminal formatting:
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info on the awk command:
+# http://linuxcommand.org/lc3_adv_awk.php
+
+.PHONY: help
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+
+##@ Cleaning targets
+
+.PHONY: clean
+clean: ## Remove build directory.
+	go clean ; \
+	rm -rf "${BUILD_DIR}"
+
+.PHONY: mrproper
+mrproper: clean ## Remove all generated files.
+	rm -rf "${LOCALBIN}"
+
+
+##@ Build
+
+.PHONY: _mkdir_build
+_mkdir_build:
+	mkdir -p "${BUILD_DIR}"
+
+${BUILD_DIR}/cover.out: _mkdir_build
+	go test \
+		-covermode=count \
+		-coverprofile "${BUILD_DIR}/cover.out" \
+		$(shell go list ./... | grep -v /vendor/ | tr '\n' ' ')
+
+${BUILD_DIR}/cover.txt: ${BUILD_DIR}/cover.out
+	go tool cover -func="${BUILD_DIR}/cover.out" -o "${BUILD_DIR}/cover.txt"
+
+${BUILD_DIR}/cover.html: ${BUILD_DIR}/cover.out
+	go tool cover -html="${BUILD_DIR}/cover.out" -o "${BUILD_DIR}/cover.html"
+
+.PHONY: cover
+cover: ${BUILD_DIR}/cover.txt ${BUILD_DIR}/cover.html ## Generate coverture reports.
+
+# -gcflags="all=-N -l"
+%.x86-64: ${GO_SOURCE} _mkdir_build
 	GOOS=linux GOARCH=amd64 \
 		go build \
 			-trimpath \
 			-ldflags="${LDFLAGS}" \
-			-o "${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.x86-64" \
-			cmd/init/main.go
-	ln -sf "../archive/${BINARY}.${VERSION}.x86-64" "${BUILD_DIR}/dist/rolling/${BINARY}.latest.x86-64"
+			-o $@ \
+			./cmd/${BINARY_NAME}
+	ln -sf $(notdir $@) $(subst .${BUILD_VERSION}.,.latest.,$@)
 
-build_arm64: build_mkdir_dir
+%.arm64: ${GO_SOURCE} _mkdir_build
 	GOOS=linux GOARCH=arm64 \
 		go build \
 			-trimpath \
 			-ldflags="${LDFLAGS}" \
-			-o "${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.arm64" \
-			cmd/init/main.go
-	ln -sf "../archive/${BINARY}.${VERSION}.arm64" "${BUILD_DIR}/dist/rolling/${BINARY}.latest.arm64"
+			-o $@ \
+			./cmd/${BINARY_NAME}
+	ln -sf $(notdir $@) $(subst .${BUILD_VERSION}.,.latest.,$@)
 
-build_x86-64_prod: build_x86-64
-	upx --no-progress --best --ultra-brute \
-		"${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.x86-64"
+.PHONY: build
+build: ${BINARIES} ## Build project binary.
 
-build_arm64_prod: build_arm64
-	upx --no-progress --best --ultra-brute \
-		"${BUILD_DIR}/dist/archive/${BINARY}.${VERSION}.arm64"
+.PHONY: all
+all: | clean test build ## Execute all tipical targets before publish.
 
-build: build_x86-64 build_arm64
 
-all: build
+##@ Test Dependencies
 
-publish: build_x86-64_prod build_arm64_prod
-	rsync \
-		--links --recursive \
-		"${BUILD_DIR}/dist/" \
-		"${PUBLISH_DEST}/"
+.PHONY: gocyclo
+gocyclo: $(GOCYCLO) ## Download gocyclo locally if necessary.
+$(GOCYCLO): $(LOCALBIN)
+	test -s $(LOCALBIN)/gocyclo || GOBIN=$(LOCALBIN) go install github.com/fzipp/gocyclo/cmd/gocyclo@$(GOCYCLO_VERSION)
 
-test:
-	go test -v ./... -cover
+.PHONY: misspell
+misspell: $(MISSPELL) ## Download misspell locally if necessary.
+$(MISSPELL): $(LOCALBIN)
+	test -s $(LOCALBIN)/misspell || GOBIN=$(LOCALBIN) go install github.com/client9/misspell/cmd/misspell@$(MISSPELL_VERSION)
 
-coverage.out:
-	go test \
-		-covermode=count \
-		-coverprofile ${BUILD_DIR}/coverage.txt \
-		$(shell go list ./... | grep -v /vendor/ | tr '\n' ' ')
 
-cover: coverage.out
-	go tool cover -func=${BUILD_DIR}/coverage.txt
+##@ Test
 
-cover-html: coverage.out
-	go tool cover -html=${BUILD_DIR}/coverage.txt
+.PHONY: cyclo
+test-cyclo: gocyclo ## Run gocyclo against code.
+	$(GOCYCLO) -over 15 .
 
-clean:
-	go clean
-	rm -rf "${BUILD_DIR}"
+.PHONY: test-misspell
+test-misspell: misspell ## Run misspell against code.
+	$(MISSPELL) -error cmd docs internal pkg LICENSE Makefile README.md
+
+.PHONY: test-go
+test-go: ## Test code.
+	go test ./... -cover
+
+.PHONY: test
+test: test-cyclo test-misspell test-go ## Execute all tests.
+
+
+##@ Release
+
+%.upx: %
+	upx --best --lzma --no-progress -o $@ $(patsubst %.upx,%,$@)
+
+.PHONY: upx
+upx: ${BINARIES_UPX} ## Compress project binaries with UPX.
+
+.PHONY: publish
+publish: ${BINARIES_UPX} ## Publish project binaries.
+	$(foreach FILE, ${BINARIES}, \
+		echo -n '{"filenames":["$(notdir ${FILE})","$(subst .${BUILD_VERSION}.,.latest.,$(notdir ${FILE}))"],"checksum":"'$(shell sha256sum "${FILE}.upx" | cut -d" " -f1)'","tags":["$(subst ${SPACE},"${COMMA}",${TAGS})"]}' > "${FILE}.publish.json" ; \
+		gpg --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \
+		curl \
+			-F "json=@${FILE}.publish.json" \
+			-F "signature=@${FILE}.publish.json.signature" \
+			-F "release=@${FILE}.upx" \
+			"${URL}" ; \
+	)
