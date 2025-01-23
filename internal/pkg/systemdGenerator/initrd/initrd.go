@@ -28,9 +28,7 @@ func initrdSystemdUnits(output string) error {
 	tmplData := templates.TmplDataSystemdUnitService{
 		Description:     "Init /sysroot",
 		Conflicts:       []string{"shutdown.target"},
-		Requires:        []string{"systemd-udev-settle.service"},
 		Before:          []string{"initrd-root-fs.target", "shutdown.target"},
-		After:           []string{"systemd-udev-settle.service"},
 		Type:            "oneshot",
 		Restart:         "no",
 		RemainAfterExit: true,

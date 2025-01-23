@@ -470,8 +470,7 @@ func Cmd(args []string) error {
 
 	// Reload systemd
 	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "/usr/bin/systemctl", "daemon-reload")
-	if err := cmd.Run(); err != nil {
+	if err := exec.CommandContext(ctx, "/usr/bin/systemctl", "daemon-reload").Run(); err != nil {
 		log.Error(err)
 		return err
 	}

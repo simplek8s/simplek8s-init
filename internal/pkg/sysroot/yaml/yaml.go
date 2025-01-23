@@ -1,20 +1,28 @@
 package yaml
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
+	"time"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/jlsalvador/simplek8s/pkg/linux/procfs"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	VERSION_1 = "1"
+	VERSION_1                = "1"
+	DEFAULT_BLOCKDEV_TIMEOUT = 5 // seconds
 )
 
 type simpleK8sGroups struct {
@@ -72,22 +80,89 @@ type SimpleK8s struct {
 	Storage *simpleK8sStorage `yaml:"storage,omitempty"`
 }
 
-func getDevices() ([]string, error) {
+func waitForAnyFile(paths []string, timeout int) error {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	disks := []string{}
-	dir := "/dev/disk/by-path"
-	if devices, err := os.ReadDir(dir); err != nil {
-		log.Error(err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	found := make(chan string, 1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				for _, path := range paths {
+					if _, err := os.Stat(path); err == nil {
+						found <- path
+						return
+					}
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}()
+	select {
+	case path := <-found:
+		log.Debugf("path %s detected.", path)
+	case <-ctx.Done():
+		return errors.New("timeout waiting for paths")
+	}
+
+	return nil
+}
+
+func getBlockDevices() ([]string, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	devices := []string{
+		//TODO: Support network devices.
+		"/dev/sda", "/dev/vda", "/dev/nvme0n1", "/dev/mmcblk0",
+	}
+
+	// Support for cmdline blockdev=<device>.
+	if blockdev, err := procfs.GetCmdlineValue[string]("blockdev", ""); err != nil {
+		return nil, err
+	} else if blockdev != "" {
+		devices = []string{blockdev}
+	}
+
+	// Support for cmdline blockdev_timeout=<seconds>.
+	blockdev_timeout, err := procfs.GetCmdlineValue[int]("blockdev_timeout", DEFAULT_BLOCKDEV_TIMEOUT)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait for any common block devices.
+	if err := waitForAnyFile(devices, blockdev_timeout); err != nil {
+		return nil, err
+	}
+
+	// Then, list all block devices and filter out FAT ones.
+	if output, err := exec.Command("/usr/sbin/blkid", "-o", "device").Output(); err != nil {
 		return nil, err
 	} else {
-		log.WithField("devices", devices).Debug()
-		for _, device := range devices {
-			disks = append(disks, filepath.Join(dir, device.Name()))
+		log.WithField("output", string(output)).Debug()
+		blockdevs := []string{}
+
+		scanner := bufio.NewScanner(bytes.NewReader(output))
+		for scanner.Scan() {
+			line := scanner.Text()
+			line = strings.TrimSpace(line)
+			if line != "" {
+				blockdevs = append(blockdevs, line)
+			}
 		}
+
+		if err := scanner.Err(); err != nil {
+			return nil, err
+		}
+
+		return blockdevs, nil
 	}
-	return disks, nil
 }
 
 // Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
@@ -223,15 +298,15 @@ func GetYamlSimpleK8s() (*SimpleK8s, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	// Get all block devices
-	blockDevices, err := getDevices()
+	// Get all block devices.
+	blockDevices, err := getBlockDevices()
 	if err != nil {
 		log.Warn(err)
 		return nil, nil
 	}
 	log.WithField("blockDevices", blockDevices).Debug()
 
-	// Search for `simplek8s.yaml` content across all block devices (filter by FAT32 partitions)
+	// Search for `simplek8s.yaml` content across all block devices.
 	var yamlContent []byte
 	if yamlContent, err = getYamlContent(blockDevices); err != nil {
 		log.WithFields(log.Fields{
@@ -245,13 +320,12 @@ func GetYamlSimpleK8s() (*SimpleK8s, error) {
 		return nil, nil
 	}
 
-	// Unmarshal the yaml content
+	// Unmarshal the yaml content.
 	yamlSk8s, err := unmarshal(yamlContent)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	log.WithField("yamlSk8s", yamlSk8s).Info()
 
 	return yamlSk8s, nil
 }
