@@ -1,16 +1,13 @@
 package yaml
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/diskfs/go-diskfs"
@@ -141,26 +138,15 @@ func getBlockDevices() ([]string, error) {
 		return nil, err
 	}
 
-	// Then, list all block devices and filter out FAT ones.
-	if output, err := exec.Command("/usr/sbin/blkid", "-o", "device").Output(); err != nil {
+	// Then, list all block devices.
+	// Returns full block device too, not just partitions. Ex: ["/dev/vda", "/dev/vda1", "/dev/vda2"].
+	if partitions, err := procfs.ParsePartitions(); err != nil {
 		return nil, err
 	} else {
-		log.WithField("output", string(output)).Debug()
 		blockdevs := []string{}
-
-		scanner := bufio.NewScanner(bytes.NewReader(output))
-		for scanner.Scan() {
-			line := scanner.Text()
-			line = strings.TrimSpace(line)
-			if line != "" {
-				blockdevs = append(blockdevs, line)
-			}
+		for _, partition := range partitions {
+			blockdevs = append(blockdevs, "/dev/"+partition.Name)
 		}
-
-		if err := scanner.Err(); err != nil {
-			return nil, err
-		}
-
 		return blockdevs, nil
 	}
 }
@@ -198,14 +184,16 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 			continue
 		}
 
-		pt, err := disk.GetPartitionTable()
-		if err != nil {
+		nPartitions := 0
+		if pt, err := disk.GetPartitionTable(); err != nil {
+			// Maybe the block device has not partition table because the filesystem
+			// is on the entire block device. Ex: `blockDevices = ["/dev/vda1"]`.
 			log.WithField("partitionTableErr", err).Debug()
-			continue
+		} else {
+			nPartitions = len(pt.GetPartitions())
 		}
-		ps := pt.GetPartitions()
 
-		for partitionIndex := 0; partitionIndex <= len(ps); partitionIndex++ {
+		for partitionIndex := 0; partitionIndex <= nPartitions; partitionIndex++ {
 			log.WithField("partitionIndex", partitionIndex).Debug()
 
 			fs, err := disk.GetFilesystem(partitionIndex)
