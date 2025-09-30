@@ -185,7 +185,7 @@ func updateOrAppendUser(users []passwd.User, user passwd.User) []passwd.User {
 	return append(newUsers, user)
 }
 
-func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.SimpleK8s) error {
+func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.Config) error {
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
 	}).Debug("start")
@@ -210,7 +210,7 @@ func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.SimpleK8s) error {
 	return nil
 }
 
-func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
+func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.Config) error {
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
 	}).Debug("start")
@@ -219,7 +219,7 @@ func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.SimpleK8s) error {
 	for _, user := range simpleK8s.Users {
 		isSystem := getBoolByDefault(user.System, false)
 
-		home := "" // Default value from `NewUser()`
+		home := ""  // Default value from `NewUser()`
 		shell := "" // Default value from `NewUser()`
 		uid := 0
 		gid := 0
@@ -399,7 +399,7 @@ func updateOrAppendLink(links []Link, link Link) []Link {
 	return append(links, link)
 }
 
-func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.SimpleK8s) error {
+func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.Config) error {
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
 	}).Debug("start")
@@ -448,7 +448,7 @@ func updateOrAppendDirectory(directories []Directory, directory Directory) []Dir
 	return append(directories, directory)
 }
 
-func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.SimpleK8s) error {
+func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.Config) error {
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
 	}).Debug("start")
@@ -520,7 +520,7 @@ func GetBytesFromEncoding(encoding *string, content *string) []byte {
 	return []byte{}
 }
 
-func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
+func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.Config) error {
 	log.WithFields(log.Fields{
 		"simpleK8s": simpleK8s,
 	}).Debug("start")
@@ -566,7 +566,7 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.SimpleK8s) error {
 	return nil
 }
 
-func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.SimpleK8s) error {
+func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.Config) error {
 	log.Debug("start")
 	defer log.Debug("end")
 

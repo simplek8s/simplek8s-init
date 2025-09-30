@@ -20,7 +20,7 @@ func Test_unmarshal(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *SimpleK8s
+		want    *Config
 		wantErr bool
 	}{
 		{
@@ -40,10 +40,10 @@ storage:
         DNS=8.8.8.8
 `),
 			},
-			want: &SimpleK8s{
+			want: &Config{
 				Version: VERSION_1,
-				Storage: &simpleK8sStorage{
-					Files: []simpleK8sFiles{
+				Storage: &Storage{
+					Files: []Files{
 						{
 							Path: "/etc/systemd/networkd/50-en-static.network",
 							Content: pointy.String(`[Match]

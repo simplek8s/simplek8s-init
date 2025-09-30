@@ -3,6 +3,7 @@
 package sysroot
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -237,7 +238,7 @@ func CmdPopulateSysroot(output string) error {
 	}).Debug("start")
 	defer log.Debug("end")
 
-	yamlSimpleK8s, err := yaml.GetYamlSimpleK8s()
+	yamlSimpleK8s, err := yaml.GetConfig(context.Background())
 	if err != nil {
 		log.WithField("output", output).Error(err)
 		return err

@@ -55,13 +55,13 @@ func getCustomCmdlineValue[T any](cmdlinePath string, key string, defaultValue T
 
 // GetCmdlineValue returns the value of a cmdline property.
 //
-//  - If no cmdline file is found, it returns an error.
-//  - If the key is not found, it returns the default value.
-//  - If the key is found and its value is not empty, it returns the value.
-// 	- If the key is found and its value is empty, it returns the default value.
-//  - If the key is found and its value is not a valid type, it returns an error.
+//   - If no cmdline file is found, it returns an error.
+//   - If the key is not found, it returns the default value.
+//   - If the key is found and its value is not empty, it returns the value.
+//   - If the key is found and its value is empty, it returns the default value.
+//   - If the key is found and its value is not a valid type, it returns an error.
 //
 // T could be one of the following types: string, int, float64 and bool.
 func GetCmdlineValue[T any](key string, defaultValue T) (T, error) {
-	return getCustomCmdlineValue[T]("/proc/cmdline", key, defaultValue)
+	return getCustomCmdlineValue("/proc/cmdline", key, defaultValue)
 }

@@ -2,7 +2,6 @@ package systemdGenerator
 
 import (
 	"fmt"
-	"os"
 
 	sr "github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/initrd"
@@ -12,8 +11,7 @@ import (
 )
 
 func isStageInitrd() bool {
-	_, err := os.Stat("/etc/initrd-release")
-	return !os.IsNotExist(err)
+	return common.CheckFileExists("/etc/initrd-release")
 }
 
 // Will creates systemd units that will mount and populate paths

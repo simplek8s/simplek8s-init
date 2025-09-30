@@ -19,15 +19,15 @@ import (
 
 const (
 	VERSION_1                = "1"
-	DEFAULT_BLOCKDEV_TIMEOUT = 5 // seconds
+	DEFAULT_BLOCKDEV_TIMEOUT = 1 * time.Second
 )
 
-type simpleK8sGroups struct {
+type Groups struct {
 	Gid    *int   `yaml:"gid,omitempty"`
 	Name   string `yaml:"name"`
 	System *bool  `yaml:"system,omitempty"`
 }
-type simpleK8sUsers struct {
+type Users struct {
 	Uid               *int     `yaml:"uid,omitempty"`
 	Gid               *int     `yaml:"gid,omitempty"`
 	Name              string   `yaml:"name,omitempty"`
@@ -36,27 +36,27 @@ type simpleK8sUsers struct {
 	Groups            []string `yaml:"groups,omitempty"`
 	System            *bool    `yaml:"system,omitempty"`
 }
-type simpleK8sMounts struct {
+type Mounts struct {
 	What    string   `yaml:"what,omitempty"`
 	Where   string   `yaml:"where,omitempty"`
 	Type    *string  `yaml:"type,omitempty"`
 	Options *string  `yaml:"options,omitempty"`
 	After   []string `yaml:"after,omitempty"`
 }
-type simpleK8sLinks struct {
+type Links struct {
 	Overwrite *bool   `yaml:"overwrite,omitempty"`
 	Path      string  `yaml:"path,omitempty"`
 	Target    string  `yaml:"target,omitempty"`
 	Owner     *string `yaml:"owner,omitempty"`
 	Hard      *bool   `yaml:"hard,omitempty"`
 }
-type simpleK8sDirectories struct {
+type Directories struct {
 	Overwrite   *bool   `yaml:"overwrite,omitempty"`
 	Path        string  `yaml:"path,omitempty"`
 	Owner       *string `yaml:"owner,omitempty"`
 	Permissions *string `yaml:"permissions,omitempty"`
 }
-type simpleK8sFiles struct {
+type Files struct {
 	Overwrite   *bool   `yaml:"overwrite,omitempty"`
 	Path        string  `yaml:"path,omitempty"`
 	Encoding    *string `yaml:"encoding,omitempty"`
@@ -64,24 +64,25 @@ type simpleK8sFiles struct {
 	Owner       *string `yaml:"owner,omitempty"`
 	Permissions *string `yaml:"permissions,omitempty"`
 }
-type simpleK8sStorage struct {
-	Mounts      []simpleK8sMounts      `yaml:"mounts,omitempty"`
-	Links       []simpleK8sLinks       `yaml:"links,omitempty"`
-	Directories []simpleK8sDirectories `yaml:"directories,omitempty"`
-	Files       []simpleK8sFiles       `yaml:"files,omitempty"`
+type Storage struct {
+	Mounts      []Mounts      `yaml:"mounts,omitempty"`
+	Links       []Links       `yaml:"links,omitempty"`
+	Directories []Directories `yaml:"directories,omitempty"`
+	Files       []Files       `yaml:"files,omitempty"`
 }
-type SimpleK8s struct {
-	Version string            `yaml:"version"`
-	Groups  []simpleK8sGroups `yaml:"groups,omitempty"`
-	Users   []simpleK8sUsers  `yaml:"users,omitempty"`
-	Storage *simpleK8sStorage `yaml:"storage,omitempty"`
+type Config struct {
+	Version string   `yaml:"version"`
+	Groups  []Groups `yaml:"groups,omitempty"`
+	Users   []Users  `yaml:"users,omitempty"`
+	Storage *Storage `yaml:"storage,omitempty"`
 }
 
-func waitForAnyFile(paths []string, timeout int) error {
+// waitForAnyFile waits for any of the provided paths to exist, with a timeout.
+func waitForAnyFile(paths []string, timeout time.Duration) error {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	found := make(chan string, 1)
@@ -111,6 +112,8 @@ func waitForAnyFile(paths []string, timeout int) error {
 	return nil
 }
 
+// Returns all block devices and their partitions path.
+// Example: /dev/sda1, /dev/vdb2, etc.
 func getBlockDevices() ([]string, error) {
 	log.Debug("start")
 	defer log.Debug("end")
@@ -121,16 +124,18 @@ func getBlockDevices() ([]string, error) {
 	}
 
 	// Support for cmdline blockdev=<device>.
-	if blockdev, err := procfs.GetCmdlineValue[string]("blockdev", ""); err != nil {
+	if blockdev, err := procfs.GetCmdlineValue("blockdev", ""); err != nil {
 		return nil, err
 	} else if blockdev != "" {
 		devices = []string{blockdev}
 	}
 
 	// Support for cmdline blockdev_timeout=<seconds>.
-	blockdev_timeout, err := procfs.GetCmdlineValue[int]("blockdev_timeout", DEFAULT_BLOCKDEV_TIMEOUT)
-	if err != nil {
+	blockdev_timeout := DEFAULT_BLOCKDEV_TIMEOUT
+	if timeout, err := procfs.GetCmdlineValue("blockdev_timeout", 0); err != nil {
 		return nil, err
+	} else if timeout > 0 {
+		blockdev_timeout = time.Duration(timeout) * time.Second
 	}
 
 	// Wait for any common block devices.
@@ -269,8 +274,8 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 	return nil, nil
 }
 
-func unmarshal(yamlContent []byte) (*SimpleK8s, error) {
-	simpleK8s := new(SimpleK8s)
+func unmarshal(yamlContent []byte) (*Config, error) {
+	simpleK8s := new(Config)
 	if err := yaml.Unmarshal(yamlContent, &simpleK8s); err != nil {
 		log.WithFields(log.Fields{
 			"content": string(yamlContent),
@@ -280,40 +285,82 @@ func unmarshal(yamlContent []byte) (*SimpleK8s, error) {
 	return simpleK8s, nil
 }
 
-// Search across all FAT32 partitions the `simplek8s.yaml` file and
-// returns it as a `SimpleK8s` type struct.
-func GetYamlSimpleK8s() (*SimpleK8s, error) {
+// TODO: Add AWS user-data from API support.
+// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+// http://169.254.169.254/latest/user-data
+func getConfigContentFromUserData(ctx context.Context) ([]byte, error) {
+	userDataPath := "/var/lib/cloud/user-data"
+	userDataContent, err := os.ReadFile(userDataPath)
+	return userDataContent, err
+}
+
+// This function will stay finding for block devices until `ctx`
+// context is cancelled or `simplek8s.yaml` file is found and read.
+func getConfigContentFromBlockDevices(ctx context.Context) ([]byte, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			// Context was canceled or deadline exceeded.
+			return nil, ctx.Err()
+
+		default:
+			// Get all block devices.
+			blockDevices, err := getBlockDevices()
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
+			if len(blockDevices) == 0 {
+				// No block devices, try again later.
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// Search for `simplek8s.yaml` content across all block devices.
+			data, err := getYamlContent(blockDevices)
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
+			if data == nil {
+				// File not found, try again later.
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// File found.
+			return data, nil
+		}
+	}
+}
+
+func GetConfig(ctx context.Context) (*Config, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	// Get all block devices.
-	blockDevices, err := getBlockDevices()
-	if err != nil {
-		log.Warn(err)
-		return nil, nil
-	}
-	log.WithField("blockDevices", blockDevices).Debug()
+	for {
+		select {
+		case <-ctx.Done():
+			// Context was canceled or deadline exceeded.
+			return nil, ctx.Err()
+		default:
 
-	// Search for `simplek8s.yaml` content across all block devices.
-	var yamlContent []byte
-	if yamlContent, err = getYamlContent(blockDevices); err != nil {
-		log.WithFields(log.Fields{
-			"yamlContent": string(yamlContent),
-		}).Error(err)
-		return nil, err
-	} else if yamlContent == nil {
-		log.WithFields(log.Fields{
-			"yamlContent": string(yamlContent),
-		}).Warn("can not find simplek8s.yaml")
-		return nil, nil
-	}
+			getConfigContentFromUserData(ctx)
 
-	// Unmarshal the yaml content.
-	yamlSk8s, err := unmarshal(yamlContent)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
+			data, err := getConfigContentFromBlockDevices(ctx)
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
 
-	return yamlSk8s, nil
+			// Unmarshal the YAML content.
+			y, err := unmarshal(data)
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
+
+			return y, nil
+		}
+	}
 }

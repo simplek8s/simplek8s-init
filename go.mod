@@ -1,6 +1,6 @@
 module github.com/jlsalvador/simplek8s
 
-go 1.19
+go 1.25
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.20.1
