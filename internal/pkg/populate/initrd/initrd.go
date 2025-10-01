@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/jlsalvador/simplek8s/pkg/copy"
+	"github.com/jlsalvador/simplek8s/pkg/cp"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,12 +20,12 @@ func populateInitrdWithFiles(output string) error {
 	for _, tbc := range []struct {
 		src string
 		dst string
-		opt *copy.CopyOptions
+		opt *cp.CopyOptions
 	}{
 		{
 			src: "/usr",
 			dst: filepath.Join(output, "/usr"),
-			opt: &copy.CopyOptions{
+			opt: &cp.CopyOptions{
 				Exclude: []*regexp.Regexp{
 					regexp.MustCompile(`/usr/share/factory/sysroot`),
 				},
@@ -36,7 +36,7 @@ func populateInitrdWithFiles(output string) error {
 		{
 			src: "/etc/ssl/certs",
 			dst: filepath.Join(output, "/usr/share/factory/etc/ssl/certs"),
-			opt: &copy.CopyOptions{
+			opt: &cp.CopyOptions{
 				PreserveAll: true,
 				Overwrite:   true,
 			},
@@ -44,7 +44,7 @@ func populateInitrdWithFiles(output string) error {
 		{
 			src: "/usr/share/factory/sysroot",
 			dst: output,
-			opt: &copy.CopyOptions{
+			opt: &cp.CopyOptions{
 				PreserveAll: true,
 				Overwrite:   true,
 			},
@@ -54,7 +54,7 @@ func populateInitrdWithFiles(output string) error {
 			log.Error(err)
 			return err
 		}
-		if err := copy.CopyDir(tbc.src, tbc.dst, tbc.opt); err != nil {
+		if err := cp.CopyDir(tbc.src, tbc.dst, tbc.opt); err != nil {
 			log.Error(err)
 			return err
 		}

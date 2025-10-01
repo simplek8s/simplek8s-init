@@ -1,101 +1,106 @@
 package main
 
 import (
-	"context"
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
-	"time"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
-	"github.com/jlsalvador/simplek8s/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/cp"
+	"github.com/jlsalvador/simplek8s/pkg/linux"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
-func MountEssentialMountpoints(where string) error {
-	mountpoints := []struct {
-		source string
-		target string
-		fstype string
-	}{
-		{"proc", "/proc", "proc"},
-		{"sysfs", "/sys", "sysfs"},
-		{"udev", "/dev", "devtmpfs"},
-	}
+func populate(output string) error {
+	log.Debug("start")
+	defer log.Debug("end")
 
-	for _, mp := range mountpoints {
-		target := filepath.Join(where, mp.target)
-		if err := syscall.Mount(mp.source, target, mp.fstype, 0, ""); err != nil {
+	for _, tbc := range []struct {
+		src string
+		dst string
+		opt *cp.CopyOptions
+	}{
+		{
+			src: "/usr",
+			dst: filepath.Join(output, "/usr"),
+			opt: &cp.CopyOptions{
+				PreserveAll: true,
+				Overwrite:   true,
+			},
+		},
+		{
+			src: "/etc",
+			dst: filepath.Join(output, "/etc"),
+			opt: &cp.CopyOptions{
+				PreserveAll: true,
+				Overwrite:   true,
+			},
+		},
+		// {
+		// 	src: "/etc/ssl/certs",
+		// 	dst: filepath.Join(output, "/usr/share/factory/etc/ssl/certs"),
+		// 	opt: &cp.CopyOptions{
+		// 		PreserveAll: true,
+		// 		Overwrite:   true,
+		// 	},
+		// },
+	} {
+		if err := os.MkdirAll(tbc.dst, 0755); err != nil {
+			log.Error(err)
+			return err
+		}
+		if err := cp.CopyDir(tbc.src, tbc.dst, tbc.opt); err != nil {
+			log.Error(err)
 			return err
 		}
 	}
-
 	return nil
 }
 
+func must(err error, errmsg string, msg string) {
+	if err != nil {
+		log.Fatal(errmsg, err)
+	}
+	log.Info(msg)
+}
+
 func main() {
-	// Mount essential mountpoints.
-	if err := MountEssentialMountpoints("/"); err != nil {
-		log.Fatal(err)
+	log.Debug("start")
+	defer log.Debug("end")
+
+	// Check if we are PID 1, warns if not.
+	if os.Getpid() != 1 {
+		log.Fatal("not PID 1")
 	}
 
-	// Wait for block devices for simplek8s.yaml.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	var yml *yaml.Config
-	for yml != nil {
-		var err error
-		yml, err = yaml.GetConfig(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	// must(linux.MountPseudoFS("/"), "can not mount pseudofs", "psuedofs rootfs ready")
+	// // Retrive SimpleK8s Config.
+	// yml, err := config.GetConfig()
+	// if err != nil {
+	// 	log.Warn(err)
+	// }
+	// log.Info(yml)
+	// must(linux.UnmountPseudoFS("/"), "can not unmount pseudofs", "psuedofs rootfs unmounted")
 
 	// Create and mount /sysroot.
 	//TODO: custom mountpoint from simplek8s.yaml
 	newroot := "/sysroot"
-	if err := os.MkdirAll(newroot, 0755); err != nil {
-		log.Fatal(err)
-	}
-	if err := syscall.Mount("tmpfs", newroot, "tmpfs", 0, "size=90%"); err != nil {
-		log.Fatal(err)
-	}
+	must(os.MkdirAll(newroot, 0755), "can not mkdir "+newroot, "mkdir "+newroot+" ready")
+	must(unix.Mount("tmpfs", newroot, "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "size=90%,mode=755"), "can not mount "+newroot, "mount "+newroot+" ready")
 
-	// Mount essential mountpoints in /sysroot.
-	if err := MountEssentialMountpoints(newroot); err != nil {
-		log.Fatal(err)
-	}
+	// Populate /sysroot.
+	must(populate(newroot), "can not populate "+newroot, "populate of "+newroot+" ready")
 
-	//TODO: Create and mount special bind mounts.
+	must(linux.MountPseudoFS(newroot), "can not mount pseudofs", "psuedofs rootfs ready")
+	must(linux.CreateDeprecatedSymlinks(newroot), "can not create deprecated symlinks into "+newroot, "deprecated symlinks for "+newroot+" created")
+	// must(unix.Mount(newroot, "/", "", unix.MS_MOVE, ""), "can not mount --move to "+newroot, "mount --move "+newroot+" / ready")
 
-	//TODO: Populate /sysroot.
+	//DEBUG
+	// must(unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ()), "", "")
 
-	//TODO: Pivot root to /sysroot.
-	oldroot := "/.oldroot"
-	if err := syscall.PivotRoot(newroot, filepath.Join(newroot, oldroot)); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.Chdir("/"); err != nil {
-		log.Fatal(err)
-	}
-	if err := syscall.Unmount(oldroot, syscall.MNT_DETACH); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.Remove(oldroot); err != nil {
-		log.Fatal(err)
-	}
-
-	// Execute next init.
-	inits := []string{"/init", "/sbin/init"}
-	for _, init := range inits {
-		if !common.CheckFileExists(init) {
-			continue
-		}
-		if err := syscall.Exec(init, []string{init}, os.Environ()); err != nil {
-			log.Fatal(err)
-		}
-	}
-
+	must(unix.Chroot(newroot), "can not chroot into "+newroot, "chroot into "+newroot+" ready")
+	// must(unix.Chdir("/"), "can not chdir into /", "chdir / ready")
+	must(unix.Exec("/usr/sbin/init", []string{"/sbin/init"}, os.Environ()), "can not exec /sbin/init", "exec /sbin/init ready")
+	fmt.Println("Exiting...")
 	os.Exit(0)
 }

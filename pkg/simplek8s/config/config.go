@@ -1,4 +1,4 @@
-package yaml
+package config
 
 import (
 	"bytes"
@@ -289,6 +289,9 @@ func unmarshal(yamlContent []byte) (*Config, error) {
 // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 // http://169.254.169.254/latest/user-data
 func getConfigContentFromUserData(ctx context.Context) ([]byte, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	userDataPath := "/var/lib/cloud/user-data"
 	userDataContent, err := os.ReadFile(userDataPath)
 	return userDataContent, err
@@ -297,6 +300,9 @@ func getConfigContentFromUserData(ctx context.Context) ([]byte, error) {
 // This function will stay finding for block devices until `ctx`
 // context is cancelled or `simplek8s.yaml` file is found and read.
 func getConfigContentFromBlockDevices(ctx context.Context) ([]byte, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -334,33 +340,32 @@ func getConfigContentFromBlockDevices(ctx context.Context) ([]byte, error) {
 	}
 }
 
-func GetConfig(ctx context.Context) (*Config, error) {
+// Retrieve SimpleK8s Config.
+func GetConfig() (*Config, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	for {
-		select {
-		case <-ctx.Done():
-			// Context was canceled or deadline exceeded.
-			return nil, ctx.Err()
-		default:
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-			getConfigContentFromUserData(ctx)
-
-			data, err := getConfigContentFromBlockDevices(ctx)
-			if err != nil {
-				log.Error(err)
-				return nil, err
-			}
-
-			// Unmarshal the YAML content.
-			y, err := unmarshal(data)
-			if err != nil {
-				log.Error(err)
-				return nil, err
-			}
-
-			return y, nil
+	select {
+	case <-ctx.Done():
+		// Context was canceled or deadline exceeded.
+		return nil, ctx.Err()
+	default:
+		data, err := getConfigContentFromBlockDevices(ctx)
+		if err != nil {
+			log.Error(err)
+			return nil, err
 		}
+
+		// Unmarshal the YAML content.
+		y, err := unmarshal(data)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+
+		return y, nil
 	}
 }

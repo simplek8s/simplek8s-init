@@ -1,4 +1,4 @@
-package copy
+package cp
 
 import (
 	"bytes"
