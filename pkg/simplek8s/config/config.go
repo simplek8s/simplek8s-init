@@ -12,7 +12,7 @@ import (
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/jlsalvador/simplek8s/pkg/linux/procfs"
+	"github.com/jlsalvador/simplek8s/pkg/linux"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -110,50 +110,6 @@ func waitForAnyFile(paths []string, timeout time.Duration) error {
 	}
 
 	return nil
-}
-
-// Returns all block devices and their partitions path.
-// Example: /dev/sda1, /dev/vdb2, etc.
-func getBlockDevices() ([]string, error) {
-	log.Debug("start")
-	defer log.Debug("end")
-
-	devices := []string{
-		//TODO: Support network devices.
-		"/dev/sda", "/dev/vda", "/dev/nvme0n1", "/dev/mmcblk0",
-	}
-
-	// Support for cmdline blockdev=<device>.
-	if blockdev, err := procfs.GetCmdlineValue("blockdev", ""); err != nil {
-		return nil, err
-	} else if blockdev != "" {
-		devices = []string{blockdev}
-	}
-
-	// Support for cmdline blockdev_timeout=<seconds>.
-	blockdev_timeout := DEFAULT_BLOCKDEV_TIMEOUT
-	if timeout, err := procfs.GetCmdlineValue("blockdev_timeout", 0); err != nil {
-		return nil, err
-	} else if timeout > 0 {
-		blockdev_timeout = time.Duration(timeout) * time.Second
-	}
-
-	// Wait for any common block devices.
-	if err := waitForAnyFile(devices, blockdev_timeout); err != nil {
-		return nil, err
-	}
-
-	// Then, list all block devices.
-	// Returns full block device too, not just partitions. Ex: ["/dev/vda", "/dev/vda1", "/dev/vda2"].
-	if partitions, err := procfs.ParsePartitions(); err != nil {
-		return nil, err
-	} else {
-		blockdevs := []string{}
-		for _, partition := range partitions {
-			blockdevs = append(blockdevs, "/dev/"+partition.Name)
-		}
-		return blockdevs, nil
-	}
 }
 
 // Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
@@ -299,23 +255,36 @@ func getConfigContentFromUserData(ctx context.Context) ([]byte, error) {
 
 // This function will stay finding for block devices until `ctx`
 // context is cancelled or `simplek8s.yaml` file is found and read.
-func getConfigContentFromBlockDevices(ctx context.Context) ([]byte, error) {
+func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 	log.Debug("start")
 	defer log.Debug("end")
+
+	linux.MountPseudoFS("/")
+	defer linux.UnmountPseudoFS("/")
 
 	for {
 		select {
 		case <-ctx.Done():
 			// Context was canceled or deadline exceeded.
-			return nil, ctx.Err()
+			log.Debug(ctx.Err())
+			return nil, nil
 
 		default:
 			// Get all block devices.
-			blockDevices, err := getBlockDevices()
+			blockDevices, err := linux.GetBlockDevices()
 			if err != nil {
 				log.Error(err)
 				return nil, err
 			}
+
+			//TODO: Add support for cmdline blockdev=<device>.
+			// if blockdev, err := procfs.GetCmdlineValue("blockdev", ""); err != nil {
+			// 	log.Error(err)
+			// 	return nil, err
+			// } else if blockdev != "" {
+			// 	blockDevices = append(blockDevices, blockdev)
+			// }
+
 			if len(blockDevices) == 0 {
 				// No block devices, try again later.
 				time.Sleep(1 * time.Second)
@@ -345,27 +314,23 @@ func GetConfig() (*Config, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	//TODO: Config timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	select {
 	case <-ctx.Done():
 		// Context was canceled or deadline exceeded.
-		return nil, ctx.Err()
+		log.Debug(ctx.Err())
+		return nil, nil
+
 	default:
-		data, err := getConfigContentFromBlockDevices(ctx)
-		if err != nil {
+		if data, err := getFromBlockDevices(ctx); err != nil {
 			log.Error(err)
 			return nil, err
+		} else if data != nil {
+			return unmarshal(data)
 		}
-
-		// Unmarshal the YAML content.
-		y, err := unmarshal(data)
-		if err != nil {
-			log.Error(err)
-			return nil, err
-		}
-
-		return y, nil
+		return nil, nil
 	}
 }

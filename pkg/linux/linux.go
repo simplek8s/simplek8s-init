@@ -21,46 +21,34 @@ func MountPseudoFS(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	mountpoints := []struct {
-		source string
+	mounts := []struct {
 		target string
+		chmod  os.FileMode
+		source string
 		fstype string
 		flags  uintptr
-		chmod  os.FileMode
 	}{
-		{
-			source: "proc",
-			target: "/proc",
-			fstype: "proc",
-			flags:  unix.MS_NOSUID | unix.MS_NOEXEC | unix.MS_NODEV,
-			chmod:  0555,
-		},
-		{
-			source: "sysfs",
-			target: "/sys",
-			fstype: "sysfs",
-			flags:  unix.MS_NOSUID | unix.MS_NOEXEC | unix.MS_NODEV,
-			chmod:  0555,
-		},
-		{
-			source: "devtmpfs",
-			target: "/dev",
-			fstype: "devtmpfs",
-			flags:  unix.MS_NOSUID,
-			chmod:  0755,
-		},
+		{"/proc", 0555, "proc", "proc", 0},
+		{"/sys", 0555, "sysfs", "sysfs", 0},
+		{"/dev", 0755, "devtmpfs", "devtmpfs",
+			unix.MS_NOSUID | unix.MS_STRICTATIME},
 	}
 
-	for _, mp := range mountpoints {
-		target := filepath.Join(where, mp.target)
-		if err := os.MkdirAll(target, mp.chmod); err != nil {
-			return fmt.Errorf("mkdir %s failed: %w", target, err)
+	for _, m := range mounts {
+		t := filepath.Join(where, m.target)
+
+		// Create destination.
+		if _, err := os.Stat(t); err != nil {
+			return fmt.Errorf("can not stat %s: %w", t, err)
+		} else if err == os.ErrNotExist {
+			if err := os.Mkdir(t, m.chmod); err != nil {
+				return fmt.Errorf("mkdir %s failed: %w", t, err)
+			}
 		}
-		if err := os.Chmod(target, mp.chmod); err != nil {
-			return fmt.Errorf("chmod %s failed: %w", target, err)
-		}
-		if err := unix.Mount(mp.source, target, mp.fstype, mp.flags, ""); err != nil {
-			return fmt.Errorf("mount %s at %s failed: %w", mp.source, target, err)
+
+		// Mount on destination.
+		if err := unix.Mount(m.source, t, m.fstype, m.flags, ""); err != nil {
+			return fmt.Errorf("mount %s at %s failed: %w", m.source, t, err)
 		}
 	}
 
@@ -72,9 +60,6 @@ func UnmountPseudoFS(where string) error {
 		dst := filepath.Join(where, mp)
 		if err := unix.Unmount(dst, unix.MNT_DETACH); err != nil {
 			return fmt.Errorf("unmount %s failed: %w", dst, err)
-		}
-		if err := unix.Rmdir(dst); err != nil {
-			return fmt.Errorf("rmdir %s failed: %w", dst, err)
 		}
 	}
 	return nil
@@ -95,4 +80,29 @@ func CreateDeprecatedSymlinks(where string) error {
 		}
 	}
 	return nil
+}
+
+// GetBlockDevices returns a slice containing the paths of all block devices
+// currently present on the host system (e.g., /dev/sda, /dev/vdb1, ...).
+//
+// It reads `/sys/class/block` which lists the block device names, then
+// prefixes each name with `/dev/` to produce full device paths.
+func GetBlockDevices() ([]string, error) {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	devices := []string{}
+
+	entries, err := os.ReadDir("/sys/class/block")
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		devPath := filepath.Join("/dev/", entry.Name())
+		devices = append(devices, devPath)
+	}
+
+	return devices, nil
 }

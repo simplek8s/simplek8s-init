@@ -7,6 +7,7 @@ import (
 
 	"github.com/jlsalvador/simplek8s/pkg/cp"
 	"github.com/jlsalvador/simplek8s/pkg/linux"
+	"github.com/jlsalvador/simplek8s/pkg/simplek8s/config"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -64,6 +65,17 @@ func must(err error, errmsg string, msg string) {
 	log.Info(msg)
 }
 
+func fetchConfig() error {
+	// Retrive SimpleK8s Config.
+	yml, err := config.GetConfig()
+	if err != nil {
+		log.Warn(err)
+	}
+	log.Info(yml)
+
+	return nil
+}
+
 func main() {
 	log.Debug("start")
 	defer log.Debug("end")
@@ -73,14 +85,12 @@ func main() {
 		log.Fatal("not PID 1")
 	}
 
-	// must(linux.MountPseudoFS("/"), "can not mount pseudofs", "psuedofs rootfs ready")
-	// // Retrive SimpleK8s Config.
-	// yml, err := config.GetConfig()
-	// if err != nil {
-	// 	log.Warn(err)
-	// }
-	// log.Info(yml)
-	// must(linux.UnmountPseudoFS("/"), "can not unmount pseudofs", "psuedofs rootfs unmounted")
+	log.SetLevel(log.DebugLevel)
+	log.SetReportCaller(true)
+	must(fetchConfig(), "can not fetch config", "fetch config success")
+
+	//DEBUG
+	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
 
 	// Create and mount /sysroot.
 	//TODO: custom mountpoint from simplek8s.yaml
@@ -91,12 +101,9 @@ func main() {
 	// Populate /sysroot.
 	must(populate(newroot), "can not populate "+newroot, "populate of "+newroot+" ready")
 
-	must(linux.MountPseudoFS(newroot), "can not mount pseudofs", "psuedofs rootfs ready")
+	must(linux.MountPseudoFS(newroot), "can not mount pseudofs", "pseudofs rootfs ready")
 	must(linux.CreateDeprecatedSymlinks(newroot), "can not create deprecated symlinks into "+newroot, "deprecated symlinks for "+newroot+" created")
 	// must(unix.Mount(newroot, "/", "", unix.MS_MOVE, ""), "can not mount --move to "+newroot, "mount --move "+newroot+" / ready")
-
-	//DEBUG
-	// must(unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ()), "", "")
 
 	must(unix.Chroot(newroot), "can not chroot into "+newroot, "chroot into "+newroot+" ready")
 	// must(unix.Chdir("/"), "can not chdir into /", "chdir / ready")
