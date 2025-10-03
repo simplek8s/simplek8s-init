@@ -1,6 +1,7 @@
 package procfs
 
 import (
+	"io"
 	"os"
 	"reflect"
 	"testing"
@@ -10,13 +11,13 @@ func TestParsePartitions(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		data    []byte
+		data    string
 		want    []Partitions
 		wantErr bool
 	}{
 		{
 			name: "ok",
-			data: []byte(`major minor  #blocks  name
+			data: `major minor  #blocks  name
 
 259        0  500107608 nvme0n1
 259        1     262144 nvme0n1p1
@@ -27,7 +28,7 @@ func TestParsePartitions(t *testing.T) {
   8       17 3906492416 sdb1
   8       18     524288 sdb2
   8       32 3907018584 sdc
-`),
+`,
 			want: []Partitions{
 				{259, 0, 500107608, "nvme0n1"},
 				{259, 1, 262144, "nvme0n1p1"},
@@ -43,7 +44,7 @@ func TestParsePartitions(t *testing.T) {
 		},
 		{
 			name: "bad",
-			data: []byte(`major minor  #blocks  name
+			data: `major minor  #blocks  name
 
 259        0  500107608 nvme0n1
 259        1     262144 nvme0n1p1
@@ -55,7 +56,7 @@ nvme0n1p2
   8       17 3906492416 sdb1
   8       18     524288 sdb2
   8       32 3907018584 sdc
-`),
+`,
 			want:    []Partitions{},
 			wantErr: true,
 		},
@@ -65,11 +66,19 @@ nvme0n1p2
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			fname := tempDir + "/" + tc.name
-			if err := os.WriteFile(fname, tc.data, 0644); err != nil {
-				t.Error(err)
+			file, err := os.OpenFile(fname, os.O_CREATE|os.O_RDWR, 0644)
+			if err != nil {
+				t.Errorf("failed to create temporary file: %v", err)
+			}
+			defer file.Close()
+			if _, err := file.WriteString(tc.data); err != nil {
+				t.Errorf("failed to seek to start of file: %v", err)
+			}
+			if _, err = file.Seek(0, io.SeekStart); err != nil {
+				t.Errorf("failed to write mock data: %v", err)
 			}
 
-			if got, err := parsePartitions(fname); !tc.wantErr && err != nil {
+			if got, err := parsePartitionsFromFile(file); !tc.wantErr && err != nil {
 				t.Errorf("unexpected err, %q", err)
 			} else if tc.wantErr {
 				if err == nil {
@@ -80,15 +89,4 @@ nvme0n1p2
 			}
 		})
 	}
-
-	t.Run("any file", func(t *testing.T) {
-		if _, err := parsePartitions(""); err == nil {
-			t.Error("expect err")
-		}
-	})
-	t.Run("not a file", func(t *testing.T) {
-		if _, err := parsePartitions(tempDir); err == nil {
-			t.Error("expect err")
-		}
-	})
 }

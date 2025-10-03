@@ -38,22 +38,22 @@ func TestGetCustomCmdlineValue(t *testing.T) {
 		t.Run(tt.key, func(t *testing.T) {
 			switch tt.defaultValue.(type) {
 			case int:
-				value, err := getCustomCmdlineValue[int](tt.cmdlineFile, tt.key, tt.defaultValue.(int))
+				value, err := getCustomCmdlineValue(tt.cmdlineFile, tt.key, tt.defaultValue.(int))
 				if (err != nil) != tt.shouldError || value != tt.expected.(int) {
 					t.Errorf("Expected %v, got %v, err: %v", tt.expected, value, err)
 				}
 			case string:
-				value, err := getCustomCmdlineValue[string](tt.cmdlineFile, tt.key, tt.defaultValue.(string))
+				value, err := getCustomCmdlineValue(tt.cmdlineFile, tt.key, tt.defaultValue.(string))
 				if (err != nil) != tt.shouldError || value != tt.expected.(string) {
 					t.Errorf("Expected %v, got %v, err: %v", tt.expected, value, err)
 				}
 			case float64:
-				value, err := getCustomCmdlineValue[float64](tt.cmdlineFile, tt.key, tt.defaultValue.(float64))
+				value, err := getCustomCmdlineValue(tt.cmdlineFile, tt.key, tt.defaultValue.(float64))
 				if (err != nil) != tt.shouldError || value != tt.expected.(float64) {
 					t.Errorf("Expected %v, got %v, err: %v", tt.expected, value, err)
 				}
 			case bool:
-				value, err := getCustomCmdlineValue[bool](tt.cmdlineFile, tt.key, tt.defaultValue.(bool))
+				value, err := getCustomCmdlineValue(tt.cmdlineFile, tt.key, tt.defaultValue.(bool))
 				if (err != nil) != tt.shouldError || value != tt.expected.(bool) {
 					t.Errorf("Expected %v, got %v, err: %v", tt.expected, value, err)
 				}
@@ -64,7 +64,7 @@ func TestGetCustomCmdlineValue(t *testing.T) {
 
 func TestGetCmdlineValue(t *testing.T) {
 	// Basic test to check if /proc/cmdline can be read
-	_, err := GetCmdlineValue[string]("nonexistent_key", "default")
+	_, err := GetCmdlineValue("nonexistent_key", "default")
 	if err != nil {
 		t.Errorf("GetCmdlineValue failed: %v", err)
 	}

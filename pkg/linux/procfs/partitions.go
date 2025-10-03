@@ -19,28 +19,10 @@ type Partitions struct {
 	Name string
 }
 
-func ParsePartitions() ([]Partitions, error) {
-	fname := "/proc/partitions"
-	return parsePartitions(fname)
-}
-
-func parsePartitions(procPartitionsFilePath string) ([]Partitions, error) {
-	// Open the partitions file.
-	f, err := os.Open(procPartitionsFilePath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	if fs, err := f.Stat(); err != nil {
-		return nil, err
-	} else if fs.IsDir() {
-		return nil, fmt.Errorf("%q is not a file", procPartitionsFilePath)
-	}
-
+func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
 	// Parse each line from file.
 	partitions := []Partitions{}
-	s := bufio.NewScanner(f)
+	s := bufio.NewScanner(file)
 	for i := 0; s.Scan(); i++ {
 		line := s.Text()
 
@@ -59,7 +41,7 @@ func parsePartitions(procPartitionsFilePath string) ([]Partitions, error) {
 		// Parse each fields.
 		fields := strings.Fields(line)
 		if len(fields) != 4 {
-			return nil, fmt.Errorf("can not parse line %q, from %q", line, procPartitionsFilePath)
+			return nil, fmt.Errorf("can not parse line %q, from %q", line, file.Name())
 		}
 		major, err := strconv.ParseInt(fields[0], 10, 64)
 		if err != nil {

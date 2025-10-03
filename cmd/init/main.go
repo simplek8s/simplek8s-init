@@ -7,7 +7,7 @@ import (
 
 	"github.com/jlsalvador/simplek8s/pkg/cp"
 	"github.com/jlsalvador/simplek8s/pkg/linux"
-	"github.com/jlsalvador/simplek8s/pkg/simplek8s/config"
+	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -65,17 +65,6 @@ func must(err error, errmsg string, msg string) {
 	log.Info(msg)
 }
 
-func fetchConfig() error {
-	// Retrive SimpleK8s Config.
-	yml, err := config.GetConfig()
-	if err != nil {
-		log.Warn(err)
-	}
-	log.Info(yml)
-
-	return nil
-}
-
 func main() {
 	log.Debug("start")
 	defer log.Debug("end")
@@ -85,11 +74,18 @@ func main() {
 		log.Fatal("not PID 1")
 	}
 
-	log.SetLevel(log.DebugLevel)
-	log.SetReportCaller(true)
-	must(fetchConfig(), "can not fetch config", "fetch config success")
+	// Enable debug logging.
+	// log.SetLevel(log.DebugLevel)
+	// log.SetReportCaller(true)
 
-	//DEBUG
+	// Retrive SimpleK8s bootstrap config.
+	must(func() error {
+		config, err := bootstrap.GetConfig()
+		log.Info(config)
+		return err
+	}(), "can not fetch config", "fetch config success")
+
+	//DEBUG: Drop to shell.
 	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
 
 	// Create and mount /sysroot.

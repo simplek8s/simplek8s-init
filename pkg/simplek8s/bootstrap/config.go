@@ -1,4 +1,4 @@
-package config
+package bootstrap
 
 import (
 	"bytes"
@@ -13,12 +13,14 @@ import (
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/jlsalvador/simplek8s/pkg/linux"
+	"github.com/jlsalvador/simplek8s/pkg/linux/sysfs"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	VERSION_1                = "1"
+	CONFIG_VERSION_1         = "1"
 	DEFAULT_BLOCKDEV_TIMEOUT = 1 * time.Second
 )
 
@@ -134,6 +136,13 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 	if err != nil {
 		log.WithField("getYamlContent", err).Warn()
 		return nil, err
+	}
+
+	if len(blockDevices) > 0 {
+		if _, err := os.Stat(blockDevices[0]); errors.Is(err, os.ErrNotExist) {
+			linux.Mount(linux.Mountpoints.Dev)
+			defer unix.Unmount(linux.Mountpoints.Dev.Target, 0)
+		}
 	}
 
 	for _, blockDevice := range blockDevices {
@@ -259,9 +268,6 @@ func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	linux.MountPseudoFS("/")
-	defer linux.UnmountPseudoFS("/")
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -271,7 +277,7 @@ func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 
 		default:
 			// Get all block devices.
-			blockDevices, err := linux.GetBlockDevices()
+			blockDevices, err := sysfs.GetBlockDevices()
 			if err != nil {
 				log.Error(err)
 				return nil, err

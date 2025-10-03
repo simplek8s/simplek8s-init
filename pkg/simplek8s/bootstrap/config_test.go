@@ -1,4 +1,4 @@
-package config
+package bootstrap
 
 import (
 	"os"
@@ -41,7 +41,7 @@ storage:
 `),
 			},
 			want: &Config{
-				Version: VERSION_1,
+				Version: CONFIG_VERSION_1,
 				Storage: &Storage{
 					Files: []Files{
 						{

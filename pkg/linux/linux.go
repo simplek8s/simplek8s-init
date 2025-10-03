@@ -1,6 +1,7 @@
 package linux
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,38 +18,58 @@ func IsStageInitrd() bool {
 	return common.CheckFileExists("/etc/initrd-release")
 }
 
+type MountPoint struct {
+	Target string
+	Chmod  os.FileMode
+	Source string
+	Fstype string
+	Flags  uintptr
+	Data   string
+}
+
+func Mount(mount MountPoint) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	// Ensure that destination exists.
+	if _, err := os.Stat(mount.Target); errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(mount.Target, mount.Chmod); err != nil {
+			return fmt.Errorf("mkdir %s failed: %w", mount.Target, err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("can not stat %s: %w", mount.Target, err)
+	}
+
+	// Mount on destination.
+	if err := unix.Mount(mount.Source, mount.Target, mount.Fstype, mount.Flags, ""); err != nil {
+		return fmt.Errorf("mount %s at %s failed: %w", mount.Source, mount.Target, err)
+	}
+
+	return nil
+}
+
+var Mountpoints = struct {
+	Dev  MountPoint
+	Sys  MountPoint
+	Proc MountPoint
+}{
+	Dev:  MountPoint{"/dev", 0755, "devtmpfs", "devtmpfs", unix.MS_NOSUID | unix.MS_STRICTATIME, ""},
+	Sys:  MountPoint{"/sys", 0555, "sysfs", "sysfs", 0, ""},
+	Proc: MountPoint{"/proc", 0555, "proc", "proc", 0, ""},
+}
+
 func MountPseudoFS(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	mounts := []struct {
-		target string
-		chmod  os.FileMode
-		source string
-		fstype string
-		flags  uintptr
-	}{
-		{"/proc", 0555, "proc", "proc", 0},
-		{"/sys", 0555, "sysfs", "sysfs", 0},
-		{"/dev", 0755, "devtmpfs", "devtmpfs",
-			unix.MS_NOSUID | unix.MS_STRICTATIME},
-	}
-
-	for _, m := range mounts {
-		t := filepath.Join(where, m.target)
-
-		// Create destination.
-		if _, err := os.Stat(t); err != nil {
-			return fmt.Errorf("can not stat %s: %w", t, err)
-		} else if err == os.ErrNotExist {
-			if err := os.Mkdir(t, m.chmod); err != nil {
-				return fmt.Errorf("mkdir %s failed: %w", t, err)
-			}
-		}
-
-		// Mount on destination.
-		if err := unix.Mount(m.source, t, m.fstype, m.flags, ""); err != nil {
-			return fmt.Errorf("mount %s at %s failed: %w", m.source, t, err)
+	for _, m := range []MountPoint{
+		Mountpoints.Dev,
+		Mountpoints.Sys,
+		Mountpoints.Proc,
+	} {
+		m.Target = filepath.Join(where, m.Target)
+		if err := Mount(m); err != nil {
+			return err
 		}
 	}
 
@@ -56,16 +77,22 @@ func MountPseudoFS(where string) error {
 }
 
 func UnmountPseudoFS(where string) error {
-	for _, mp := range []string{"/proc", "/sys", "/dev"} {
-		dst := filepath.Join(where, mp)
-		if err := unix.Unmount(dst, unix.MNT_DETACH); err != nil {
-			return fmt.Errorf("unmount %s failed: %w", dst, err)
+	log.Debug("start")
+	defer log.Debug("end")
+
+	for _, target := range []string{Mountpoints.Dev.Target, Mountpoints.Sys.Target, Mountpoints.Proc.Target} {
+		target = filepath.Join(where, target)
+		if err := unix.Unmount(target, unix.MNT_DETACH); err != nil {
+			return fmt.Errorf("unmount %s failed: %w", target, err)
 		}
 	}
 	return nil
 }
 
 func CreateDeprecatedSymlinks(where string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
 	for _, sl := range []struct {
 		old string
 		new string
@@ -80,29 +107,4 @@ func CreateDeprecatedSymlinks(where string) error {
 		}
 	}
 	return nil
-}
-
-// GetBlockDevices returns a slice containing the paths of all block devices
-// currently present on the host system (e.g., /dev/sda, /dev/vdb1, ...).
-//
-// It reads `/sys/class/block` which lists the block device names, then
-// prefixes each name with `/dev/` to produce full device paths.
-func GetBlockDevices() ([]string, error) {
-	log.Debug("start")
-	defer log.Debug("end")
-
-	devices := []string{}
-
-	entries, err := os.ReadDir("/sys/class/block")
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		devPath := filepath.Join("/dev/", entry.Name())
-		devices = append(devices, devPath)
-	}
-
-	return devices, nil
 }
