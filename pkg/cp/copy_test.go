@@ -227,3 +227,69 @@ func TestCopyDir(t *testing.T) {
 		}
 	})
 }
+
+func TestCopyFile(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "f1.txt")
+	srcContent := []byte("hello single file")
+	if err := os.WriteFile(srcFile, srcContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("copy to specific file path", func(t *testing.T) {
+		t.Parallel()
+		dstDir := t.TempDir()
+		dstFile := filepath.Join(dstDir, "f1_copy.txt")
+
+		if err := Copy(srcFile, dstFile, nil); err != nil {
+			t.Error(err)
+		}
+
+		got, err := os.ReadFile(dstFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, srcContent) {
+			t.Errorf("content mismatch: got=%q want=%q", got, srcContent)
+		}
+	})
+
+	t.Run("copy to existing directory", func(t *testing.T) {
+		t.Parallel()
+		dstDir := t.TempDir()
+
+		if err := Copy(srcFile, dstDir, nil); err != nil {
+			t.Error(err)
+		}
+
+		dstFile := filepath.Join(dstDir, "f1.txt")
+		got, err := os.ReadFile(dstFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, srcContent) {
+			t.Errorf("content mismatch: got=%q want=%q", got, srcContent)
+		}
+	})
+
+	t.Run("copy to non-existent directory", func(t *testing.T) {
+		t.Parallel()
+		parentDir := t.TempDir()
+		dstDir := filepath.Join(parentDir, "nested", "dir")
+		dstFile := filepath.Join(dstDir, "f1.txt")
+
+		if err := Copy(srcFile, dstFile, nil); err != nil {
+			t.Error(err)
+		}
+
+		got, err := os.ReadFile(dstFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, srcContent) {
+			t.Errorf("content mismatch: got=%q want=%q", got, srcContent)
+		}
+	})
+}

@@ -1,70 +1,134 @@
+// Copyright 2020 José Luis Salvador Rufo
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package main will bootstrap from the initrd stage to the next stage.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/jlsalvador/simplek8s/pkg/cp"
+	"github.com/jlsalvador/simplek8s/internal/pkg/initrd"
 	"github.com/jlsalvador/simplek8s/pkg/linux"
 	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
-func populate(output string) error {
+// Create and mount /sysroot.
+func mountNextRoot() (where string, err error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	for _, tbc := range []struct {
-		src string
-		dst string
-		opt *cp.CopyOptions
-	}{
-		{
-			src: "/usr",
-			dst: filepath.Join(output, "/usr"),
-			opt: &cp.CopyOptions{
-				PreserveAll: true,
-				Overwrite:   true,
-			},
-		},
-		{
-			src: "/etc",
-			dst: filepath.Join(output, "/etc"),
-			opt: &cp.CopyOptions{
-				PreserveAll: true,
-				Overwrite:   true,
-			},
-		},
-		// {
-		// 	src: "/etc/ssl/certs",
-		// 	dst: filepath.Join(output, "/usr/share/factory/etc/ssl/certs"),
-		// 	opt: &cp.CopyOptions{
-		// 		PreserveAll: true,
-		// 		Overwrite:   true,
-		// 	},
-		// },
-	} {
-		if err := os.MkdirAll(tbc.dst, 0755); err != nil {
-			log.Error(err)
-			return err
-		}
-		if err := cp.CopyDir(tbc.src, tbc.dst, tbc.opt); err != nil {
-			log.Error(err)
-			return err
-		}
+	nextRoot := linux.MountPoint{
+		Target: "/sysroot",
+		Chmod:  0755,
+		Source: "tmpfs",
+		Fstype: "tmpfs",
+		Flags:  unix.MS_NOSUID | unix.MS_NODEV,
+		Data:   "size=90%,mode=755",
 	}
+
+	if err := linux.Mount(nextRoot); err != nil {
+		return "", err
+	}
+
+	// if err := linux.MountPseudoFS(where); err != nil {
+	// 	log.WithError(err).Error("can not mount pseudofs into " + where)
+	// 	return "", err
+	// }
+
+	return nextRoot.Target, nil
+}
+
+// Copy usr files from initrd and mount required filesystems into /sysroot.
+func populateNextRoot(where string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	// Retrive SimpleK8s bootstrap config.
+	config, err := bootstrap.GetConfig()
+	if err != nil {
+		log.WithError(err).Error("can not fetch bootstrap config")
+	} else {
+		log.WithField("config", config).Info("fetched bootstrap config")
+	}
+
+	//TODO: Mount /var.
+
+	//TODO: Mount /var binds into /.
+
+	if err := os.Mkdir(filepath.Join(where, "/usr"), 0755); err != nil {
+		log.WithError(err).Error("can not create directory /usr into " + where)
+		return err
+	}
+
+	if err := linux.CreateDeprecatedSymlinks(where); err != nil {
+		log.WithError(err).Error("can not create deprecated symlinks into " + where)
+		return err
+	}
+
+	if err := initrd.PopulateRoot(where); err != nil {
+		log.WithError(err).Error("can not populate " + filepath.Join(where, "/usr"))
+		return err
+	}
+
+	//TODO: populate using bootstrap config.
+
+	// // Remount /usr as RO.
+	// if err := unix.Mount("", filepath.Join(where, "/usr"), "", 0, "remount,ro"); err != nil {
+	// 	log.WithError(err).Error("can not remount as RO " + filepath.Join(where, "/usr"))
+	// 	return err
+	// }
+
 	return nil
 }
 
-func must(err error, errmsg string, msg string) {
-	if err != nil {
-		log.Fatal(errmsg, err)
+// Switch over to the next root and exec to the next init.
+func switchRoot(where string) error {
+	log.Debug("start")
+	defer log.Debug("end")
+
+	// unix.Mount(newroot, "/", "", unix.MS_MOVE, "")
+
+	if err := unix.Chroot(where); err != nil {
+		log.WithError(err).Error("can not chroot into " + where)
+		return err
 	}
-	log.Info(msg)
+
+	// unix.Chdir("/")
+
+	for _, init := range []string{"/sbin/init"} {
+		if _, err := os.Stat(init); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+
+		if err := unix.Exec(init, []string{init}, os.Environ()); err != nil {
+			log.WithError(err).Error("can not exec " + init)
+			return err
+		}
+	}
+
+	return nil
 }
 
+// main will:
+//   - Mount /sysroot
+//   - Populate /sysroot
+//   - Switch root to /sysroot
 func main() {
 	log.Debug("start")
 	defer log.Debug("end")
@@ -78,32 +142,22 @@ func main() {
 	// log.SetLevel(log.DebugLevel)
 	// log.SetReportCaller(true)
 
-	// Retrive SimpleK8s bootstrap config.
-	must(func() error {
-		config, err := bootstrap.GetConfig()
-		log.Info(config)
-		return err
-	}(), "can not fetch config", "fetch config success")
-
 	//DEBUG: Drop to shell.
 	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
 
-	// Create and mount /sysroot.
-	//TODO: custom mountpoint from simplek8s.yaml
-	newroot := "/sysroot"
-	must(os.MkdirAll(newroot, 0755), "can not mkdir "+newroot, "mkdir "+newroot+" ready")
-	must(unix.Mount("tmpfs", newroot, "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "size=90%,mode=755"), "can not mount "+newroot, "mount "+newroot+" ready")
+	where, err := mountNextRoot()
+	if err != nil {
+		log.WithError(err).Fatal("can not mount next root")
+	}
 
-	// Populate /sysroot.
-	must(populate(newroot), "can not populate "+newroot, "populate of "+newroot+" ready")
+	if err := populateNextRoot(where); err != nil {
+		log.WithError(err).Fatal("can not populate next root " + where)
+	}
 
-	must(linux.MountPseudoFS(newroot), "can not mount pseudofs", "pseudofs rootfs ready")
-	must(linux.CreateDeprecatedSymlinks(newroot), "can not create deprecated symlinks into "+newroot, "deprecated symlinks for "+newroot+" created")
-	// must(unix.Mount(newroot, "/", "", unix.MS_MOVE, ""), "can not mount --move to "+newroot, "mount --move "+newroot+" / ready")
+	if err := switchRoot(where); err != nil {
+		log.WithError(err).Fatal("can not chroot to " + where)
+	}
 
-	must(unix.Chroot(newroot), "can not chroot into "+newroot, "chroot into "+newroot+" ready")
-	// must(unix.Chdir("/"), "can not chdir into /", "chdir / ready")
-	must(unix.Exec("/usr/sbin/init", []string{"/sbin/init"}, os.Environ()), "can not exec /sbin/init", "exec /sbin/init ready")
 	fmt.Println("Exiting...")
 	os.Exit(0)
 }

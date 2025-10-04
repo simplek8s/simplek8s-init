@@ -42,8 +42,6 @@ type CopyOptions struct {
 	PreserveXAttrs bool
 }
 
-// Will overwrite `dst`.
-//
 // Doc:
 //   - https://github.com/moby/moby/blob/master/daemon/graphdriver/copy/copy.go
 func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *CopyOptions) error {
@@ -55,6 +53,15 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 		"opt":     opt,
 	}).Debug("start")
 	defer log.Debug("end")
+
+	// Skip exist entries if overwrite is false
+	info, _ := os.Stat(dst)
+	if !opt.Overwrite && info != nil {
+		log.WithFields(log.Fields{
+			"dst": dst,
+		}).Debug("skip overwrite")
+		return nil
+	}
 
 	fullname := filepath.Join(srcPath, src)
 	mode := fi.Mode()
@@ -89,6 +96,14 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 			perm = opt.FilePerm
 		}
 
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			log.WithFields(log.Fields{
+				"dst": dst,
+			}).Error(err)
+			return err
+		}
+
 		// Remove possible exists file
 		if common.CheckFileExists(dst) {
 			if err := os.Remove(dst); err != nil {
@@ -99,6 +114,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 			}
 		}
 
+		log.WithField("src", src).WithField("opt.Fsys", opt.Fsys).Debug()
 		fSrc, err := opt.Fsys.Open(src)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -213,16 +229,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 	return nil
 }
 
-// Copy the whole `src` directory content into the directory `dst`
-func CopyDir(src string, dst string, options *CopyOptions) error {
-	log.WithFields(log.Fields{
-		"src":     src,
-		"dst":     dst,
-		"options": options,
-	}).Debug("start")
-	defer log.Debug("end")
-
-	// Default options
+func getOptionsWithDefaults(options *CopyOptions, src string) (string, *CopyOptions) {
 	var root string
 	opt := &CopyOptions{
 		Overwrite:      false,
@@ -271,6 +278,50 @@ func CopyDir(src string, dst string, options *CopyOptions) error {
 		root = "."
 		opt.Fsys = os.DirFS(src)
 	}
+	return root, opt
+}
+
+func copyFile(src string, dst string, fi fs.FileInfo, path string, root string, opt *CopyOptions) error {
+	log.WithFields(log.Fields{
+		"src":  src,
+		"dst":  dst,
+		"fi":   fi,
+		"path": path,
+		"root": root,
+		"opt":  opt,
+	}).Debug("start")
+	defer log.Debug("end")
+
+	cPath := strings.TrimLeft(path, root)
+	cPath = strings.TrimLeft(cPath, string(filepath.Separator))
+	cPath = filepath.Clean(cPath)
+	dstFullname := filepath.Join(dst, cPath)
+
+	// Exclude
+	for _, r := range opt.Exclude {
+		fullSrc := filepath.Join(src, path)
+		if r.Match([]byte(fullSrc)) {
+			log.WithFields(log.Fields{
+				"r":       r,
+				"fullSrc": fullSrc,
+			}).Debug("exclude")
+			return nil
+		}
+	}
+
+	return copyEntry(src, path, fi, dstFullname, opt)
+}
+
+// Copy the whole `src` directory content into the directory `dst`
+func CopyDir(src string, dst string, options *CopyOptions) error {
+	log.WithFields(log.Fields{
+		"src":     src,
+		"dst":     dst,
+		"options": options,
+	}).Debug("start")
+	defer log.Debug("end")
+
+	root, opt := getOptionsWithDefaults(options, src)
 
 	// Walk into `src` directory
 	return fs.WalkDir(opt.Fsys, root, func(path string, d fs.DirEntry, err error) error {
@@ -278,33 +329,44 @@ func CopyDir(src string, dst string, options *CopyOptions) error {
 			return err
 		}
 
-		fi, _ := d.Info()
-		cPath := strings.TrimLeft(path, root)
-		cPath = strings.TrimLeft(cPath, string(filepath.Separator))
-		cPath = filepath.Clean(cPath)
-		dstFullname := filepath.Join(dst, cPath)
-
-		// Skip exist entries if overwrite is false
-		info, _ := os.Stat(dstFullname)
-		if !opt.Overwrite && info != nil {
-			log.WithFields(log.Fields{
-				"dstFullname": dstFullname,
-			}).Debug("skip overwrite")
-			return nil
+		fi, err := d.Info()
+		if err != nil {
+			return err
 		}
-
-		// Exclude
-		for _, r := range opt.Exclude {
-			fullSrc := filepath.Join(src, path)
-			if r.Match([]byte(fullSrc)) {
-				log.WithFields(log.Fields{
-					"r":       r,
-					"fullSrc": fullSrc,
-				}).Debug("exclude")
-				return nil
-			}
-		}
-
-		return copyEntry(src, path, fi, dstFullname, opt)
+		return copyFile(src, dst, fi, path, root, opt)
 	})
+}
+
+func Copy(src string, dst string, options *CopyOptions) error {
+	fi, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if fi.IsDir() {
+		return CopyDir(src, dst, options)
+	}
+
+	// src is a file.
+
+	root, opt := getOptionsWithDefaults(options, filepath.Dir(src))
+	relPath := filepath.Base(src)
+
+	dstInfo, err := os.Stat(dst)
+	if err == nil {
+		// dst exists.
+		if dstInfo.IsDir() {
+			// copy src inside dst directory.
+			return copyFile(filepath.Dir(src), dst, fi, relPath, root, opt)
+		}
+		// if dst is a file, overwrite it.
+		return copyEntry(filepath.Dir(src), relPath, fi, dst, opt)
+	}
+
+	if os.IsNotExist(err) {
+		// dst not exists, so dst must be a file
+		return copyEntry(filepath.Dir(src), relPath, fi, dst, opt)
+	}
+
+	return err
 }
