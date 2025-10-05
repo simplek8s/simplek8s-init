@@ -3,7 +3,9 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -77,6 +79,11 @@ type Config struct {
 	Groups  []Groups `yaml:"groups,omitempty"`
 	Users   []Users  `yaml:"users,omitempty"`
 	Storage *Storage `yaml:"storage,omitempty"`
+}
+
+func (c *Config) String() string {
+	j, _ := json.Marshal(c)
+	return fmt.Sprintf("%s", string(j))
 }
 
 // waitForAnyFile waits for any of the provided paths to exist, with a timeout.

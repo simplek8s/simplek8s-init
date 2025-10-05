@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	"github.com/jlsalvador/simplek8s/internal/pkg/initrd"
+	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
 	"github.com/jlsalvador/simplek8s/pkg/linux"
 	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	log "github.com/sirupsen/logrus"
@@ -58,14 +59,6 @@ func mountNextRoot() (where string, err error) {
 func populateNextRoot(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
-
-	// Retrive SimpleK8s bootstrap config.
-	config, err := bootstrap.GetConfig()
-	if err != nil {
-		log.WithError(err).Error("can not fetch bootstrap config")
-	} else {
-		log.WithField("config", config).Info("fetched bootstrap config")
-	}
 
 	//TODO: Mount /var.
 
@@ -111,6 +104,30 @@ func switchRoot(where string) error {
 
 	// unix.Chdir("/")
 
+	// Retrive SimpleK8s bootstrap config.
+	config, err := bootstrap.GetConfig()
+	if err != nil {
+		log.WithError(err).Error("can not fetch bootstrap config")
+	} else {
+		log.WithField("config", config).Info("fetched bootstrap config")
+	}
+	if config != nil {
+		// Populate current chrooted "/" using bootstrap config.
+		sr, err := sysroot.New("/")
+		if err != nil {
+			log.WithError(err).Error("can not create sysroot config")
+			return err
+		}
+		if err := sr.FeedByBootstrapConfig(*config); err != nil {
+			log.WithError(err).Error("can not feed by bootstrap config")
+			return err
+		}
+		if err := sr.Write(); err != nil {
+			log.WithError(err).Error("can not write sysroot config")
+			return err
+		}
+	}
+
 	for _, init := range []string{"/sbin/init"} {
 		if _, err := os.Stat(init); errors.Is(err, os.ErrNotExist) {
 			continue
@@ -125,11 +142,61 @@ func switchRoot(where string) error {
 	return nil
 }
 
+type KmsgFormatter struct {
+	Ident string
+}
+
+func (f *KmsgFormatter) Format(entry *log.Entry) ([]byte, error) {
+	var level int
+	switch entry.Level {
+	case log.PanicLevel, log.FatalLevel:
+		level = 0
+	case log.ErrorLevel:
+		level = 3
+	case log.WarnLevel:
+		level = 4
+	case log.InfoLevel:
+		level = 6
+	default:
+		level = 7 // Debug/Trace
+	}
+
+	ft := log.TextFormatter{
+		DisableColors:    true,
+		DisableTimestamp: true,
+	}
+	msg, _ := ft.Format(entry)
+
+	// kmsg rate limiting
+	// time.Sleep(10 * time.Millisecond)
+	return fmt.Appendf(nil, "<%d>%s[%d]: %s", level, f.Ident, os.Getpid(), msg), nil
+}
+
 // main will:
 //   - Mount /sysroot
 //   - Populate /sysroot
 //   - Switch root to /sysroot
 func main() {
+	if err := linux.Mount(linux.Mountpoints.Dev); err != nil {
+		log.SetOutput(os.Stdout)
+		log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
+	}
+
+	kmsg, err := os.OpenFile("/dev/kmsg", os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.SetOutput(os.Stdout)
+		log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
+	} else {
+		defer kmsg.Close()
+	}
+
+	// mw := io.MultiWriter(kmsg, os.Stdout)
+	// log.SetOutput(mw)
+	log.SetOutput(kmsg)
+
+	log.SetFormatter(&KmsgFormatter{Ident: "simplek8s-init"})
+	log.SetLevel(log.InfoLevel)
+
 	log.Debug("start")
 	defer log.Debug("end")
 
@@ -137,10 +204,6 @@ func main() {
 	if os.Getpid() != 1 {
 		log.Fatal("not PID 1")
 	}
-
-	// Enable debug logging.
-	// log.SetLevel(log.DebugLevel)
-	// log.SetReportCaller(true)
 
 	//DEBUG: Drop to shell.
 	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())

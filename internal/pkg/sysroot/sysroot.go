@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	"github.com/jlsalvador/simplek8s/pkg/common"
 	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
+	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -185,13 +185,13 @@ func updateOrAppendUser(users []passwd.User, user passwd.User) []passwd.User {
 	return append(newUsers, user)
 }
 
-func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.Config) error {
+func (sysroot *Sysroot) parseYAMLGroups(config bootstrap.Config) error {
 	log.WithFields(log.Fields{
-		"simpleK8s": simpleK8s,
+		"config": config,
 	}).Debug("start")
 	defer log.Debug("end")
 
-	for _, group := range simpleK8s.Groups {
+	for _, group := range config.Groups {
 		isSystem := getBoolByDefault(group.System, false)
 
 		var gid int
@@ -210,13 +210,13 @@ func (sysroot *Sysroot) parseYAMLGroups(simpleK8s yaml.Config) error {
 	return nil
 }
 
-func (sysroot *Sysroot) parseYAMLUsers(simpleK8s yaml.Config) error {
+func (sysroot *Sysroot) parseYAMLUsers(config bootstrap.Config) error {
 	log.WithFields(log.Fields{
-		"simpleK8s": simpleK8s,
+		"config": config,
 	}).Debug("start")
 	defer log.Debug("end")
 
-	for _, user := range simpleK8s.Users {
+	for _, user := range config.Users {
 		isSystem := getBoolByDefault(user.System, false)
 
 		home := ""  // Default value from `NewUser()`
@@ -399,18 +399,18 @@ func updateOrAppendLink(links []Link, link Link) []Link {
 	return append(links, link)
 }
 
-func (sysroot *Sysroot) parseYAMLLinks(simpleK8s yaml.Config) error {
+func (sysroot *Sysroot) parseYAMLLinks(config bootstrap.Config) error {
 	log.WithFields(log.Fields{
-		"simpleK8s": simpleK8s,
+		"config": config,
 	}).Debug("start")
 	defer log.Debug("end")
 
-	if simpleK8s.Storage != nil {
+	if config.Storage != nil {
 
 		// Set UID and GID from own process by default
 		defaultUid, defaultGid := common.GetOwnUidGid()
 
-		for _, link := range simpleK8s.Storage.Links {
+		for _, link := range config.Storage.Links {
 			uid := defaultUid
 			gid := defaultGid
 			if link.Owner != nil {
@@ -448,18 +448,18 @@ func updateOrAppendDirectory(directories []Directory, directory Directory) []Dir
 	return append(directories, directory)
 }
 
-func (sysroot *Sysroot) parseYAMLDirectories(simpleK8s yaml.Config) error {
+func (sysroot *Sysroot) parseYAMLDirectories(config bootstrap.Config) error {
 	log.WithFields(log.Fields{
-		"simpleK8s": simpleK8s,
+		"config": config,
 	}).Debug("start")
 	defer log.Debug("end")
 
-	if simpleK8s.Storage != nil {
+	if config.Storage != nil {
 
 		// Set UID and GID from own process by default
 		defaultUid, defaultGid := common.GetOwnUidGid()
 
-		for _, directory := range simpleK8s.Storage.Directories {
+		for _, directory := range config.Storage.Directories {
 			isOverwrite := getBoolByDefault(directory.Overwrite, false)
 
 			uid := defaultUid
@@ -520,18 +520,18 @@ func GetBytesFromEncoding(encoding *string, content *string) []byte {
 	return []byte{}
 }
 
-func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.Config) error {
+func (sysroot *Sysroot) parseYAMLFiles(config bootstrap.Config) error {
 	log.WithFields(log.Fields{
-		"simpleK8s": simpleK8s,
+		"config": config,
 	}).Debug("start")
 	defer log.Debug("end")
 
-	if simpleK8s.Storage != nil {
+	if config.Storage != nil {
 
 		// Set UID and GID from own process by default
 		defaultUid, defaultGid := common.GetOwnUidGid()
 
-		for _, file := range simpleK8s.Storage.Files {
+		for _, file := range config.Storage.Files {
 			filename := file.Path
 			isOverwrite := getBoolByDefault(file.Overwrite, false)
 
@@ -566,36 +566,29 @@ func (sysroot *Sysroot) parseYAMLFiles(simpleK8s yaml.Config) error {
 	return nil
 }
 
-func (sysroot *Sysroot) FeedByYAML(simpleK8s *yaml.Config) error {
-	log.Debug("start")
+func (sysroot *Sysroot) FeedByBootstrapConfig(config bootstrap.Config) error {
+	log.WithFields(log.Fields{
+		"config": config,
+	}).Debug("start")
 	defer log.Debug("end")
 
-	log.WithFields(log.Fields{
-		"simpleK8s": simpleK8s,
-	}).Debug("start")
-	log.Debug("end")
-
-	if simpleK8s == nil {
-		return nil
-	}
-
-	if err := sysroot.parseYAMLGroups(*simpleK8s); err != nil {
+	if err := sysroot.parseYAMLGroups(config); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.parseYAMLUsers(*simpleK8s); err != nil {
+	if err := sysroot.parseYAMLUsers(config); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.parseYAMLLinks(*simpleK8s); err != nil {
+	if err := sysroot.parseYAMLLinks(config); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.parseYAMLDirectories(*simpleK8s); err != nil {
+	if err := sysroot.parseYAMLDirectories(config); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.parseYAMLFiles(*simpleK8s); err != nil {
+	if err := sysroot.parseYAMLFiles(config); err != nil {
 		log.Error(err)
 		return err
 	}

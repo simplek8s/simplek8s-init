@@ -13,9 +13,9 @@ import (
 
 	"github.com/coreos/go-systemd/v22/unit"
 	//"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
-	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	"github.com/jlsalvador/simplek8s/internal/pkg/systemdGenerator/templates"
 	"github.com/jlsalvador/simplek8s/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -272,15 +272,15 @@ func getUnitsByDefault() (SystemdUnitsTmpl, error) {
 // var reIpV4 = regexp.MustCompile(`^((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.?){4})`)
 // var reIpV6 = regexp.MustCompile(`(?m)^([[:xdigit:]]{1,4}(?::[[:xdigit:]]{1,4}){7}|::|:(?::[[:xdigit:]]{1,4}){1,6}|[[:xdigit:]]{1,4}:(?::[[:xdigit:]]{1,4}){1,5}|(?:[[:xdigit:]]{1,4}:){2}(?::[[:xdigit:]]{1,4}){1,4}|(?:[[:xdigit:]]{1,4}:){3}(?::[[:xdigit:]]{1,4}){1,3}|(?:[[:xdigit:]]{1,4}:){4}(?::[[:xdigit:]]{1,4}){1,2}|(?:[[:xdigit:]]{1,4}:){5}:[[:xdigit:]]{1,4}|(?:[[:xdigit:]]{1,4}:){1,6}:)`)
 
-func getUnitsFromYaml(yamlSimpleK8s *yaml.Config, defaultUnits SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
+func getUnitsFromBootstrapConfig(config *bootstrap.Config, defaultUnits SystemdUnitsTmpl) (SystemdUnitsTmpl, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 
 	units := defaultUnits
 
-	if yamlSimpleK8s != nil && yamlSimpleK8s.Storage != nil && yamlSimpleK8s.Storage.Mounts != nil {
-		log.WithField("mounts", yamlSimpleK8s.Storage.Mounts).Debug()
-		for _, mount := range yamlSimpleK8s.Storage.Mounts {
+	if config != nil && config.Storage != nil && config.Storage.Mounts != nil {
+		log.WithField("mounts", config.Storage.Mounts).Debug()
+		for _, mount := range config.Storage.Mounts {
 
 			where := mount.Where
 			if string([]rune(mount.Where)[0:1]) == "/" {
@@ -421,10 +421,10 @@ func Cmd(args []string) error {
 	if units, err = getUnitsByDefault(); err != nil {
 		log.Error(err)
 		return err
-	} else if yamlSimpleK8s, err := yaml.GetConfig(context.Background()); err != nil {
+	} else if yamlSimpleK8s, err := bootstrap.GetConfig(); err != nil {
 		log.Error(err)
 		return err
-	} else if units, err = getUnitsFromYaml(yamlSimpleK8s, units); err != nil {
+	} else if units, err = getUnitsFromBootstrapConfig(yamlSimpleK8s, units); err != nil {
 		log.Error(err)
 		return err
 		//} else if units, err = createSystemdNetworkFilesFromYaml(yamlSimpleK8s, units); err != nil {

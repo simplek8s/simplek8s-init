@@ -3,7 +3,6 @@
 package sysroot
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -12,9 +11,9 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/jlsalvador/simplek8s/internal/pkg/populate/templates"
 	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot"
-	"github.com/jlsalvador/simplek8s/internal/pkg/sysroot/yaml"
 	"github.com/jlsalvador/simplek8s/pkg/common"
 	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
+	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	log "github.com/sirupsen/logrus"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
@@ -238,13 +237,13 @@ func CmdPopulateSysroot(output string) error {
 	}).Debug("start")
 	defer log.Debug("end")
 
-	yamlSimpleK8s, err := yaml.GetConfig(context.Background())
+	config, err := bootstrap.GetConfig()
 	if err != nil {
 		log.WithField("output", output).Error(err)
 		return err
 	}
-	sshAllowRootPassword := yamlSimpleK8s == nil
-	generateRootPassword := yamlSimpleK8s == nil
+	sshAllowRootPassword := config == nil
+	generateRootPassword := config == nil
 
 	sr, err := sysroot.New(output)
 	if err != nil {
@@ -272,12 +271,12 @@ func CmdPopulateSysroot(output string) error {
 		return err
 	}
 
-	if yamlSimpleK8s != nil {
+	if config != nil {
 		if err := sr.FeedByCurrentFiles(); err != nil {
 			log.Error(err)
 			return err
 		}
-		if err := sr.FeedByYAML(yamlSimpleK8s); err != nil {
+		if err := sr.FeedByBootstrapConfig(*config); err != nil {
 			log.Error(err)
 			return err
 		}
