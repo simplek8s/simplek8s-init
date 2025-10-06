@@ -89,6 +89,11 @@ func UnmountPseudoFS(where string) error {
 	return nil
 }
 
+// This func creates the next symlinks:
+//   - usr/bin  -> bin
+//   - usr/sbin -> sbin
+//   - usr/lib  -> lib
+//   - lib      -> lib64
 func CreateDeprecatedSymlinks(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
@@ -98,9 +103,9 @@ func CreateDeprecatedSymlinks(where string) error {
 		new string
 	}{
 		{"usr/bin", filepath.Join(where, "bin")},
+		{"usr/sbin", filepath.Join(where, "sbin")},
 		{"usr/lib", filepath.Join(where, "lib")},
 		{"lib", filepath.Join(where, "lib64")},
-		{"usr/sbin", filepath.Join(where, "sbin")},
 	} {
 		if err := os.Symlink(sl.old, sl.new); err != nil {
 			return fmt.Errorf("can not create symlink %s as %s", sl.old, sl.new)

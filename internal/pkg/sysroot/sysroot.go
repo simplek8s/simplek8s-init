@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,7 +53,6 @@ type File struct {
 }
 
 type Sysroot struct {
-	Path        string
 	Shadows     []passwd.Shadow
 	Groups      []passwd.Group
 	Users       []passwd.User
@@ -60,21 +60,6 @@ type Sysroot struct {
 	Links       []Link
 	Directories []Directory
 	Files       []File
-}
-
-func isIntInList(value int, list []int) bool {
-	log.WithFields(log.Fields{
-		"value": value,
-		"list":  list,
-	}).Debug("start")
-	defer log.Debug("end")
-
-	for _, v := range list {
-		if value == v {
-			return true
-		}
-	}
-	return false
 }
 
 func getNextGid(groups []passwd.Group, isSystem bool) int {
@@ -98,7 +83,7 @@ func getNextGid(groups []passwd.Group, isSystem bool) int {
 		ids = append(ids, int(group.Gid))
 	}
 
-	for isIntInList(current, ids) {
+	for slices.Contains(ids, current) {
 		current++
 	}
 	return current
@@ -125,7 +110,7 @@ func getNextUid(users []passwd.User, isSystem bool) int {
 		ids = append(ids, int(user.Uid))
 	}
 
-	for isIntInList(current, ids) {
+	for slices.Contains(ids, current) {
 		current++
 	}
 	return current
@@ -670,13 +655,15 @@ func (sysroot *Sysroot) parseFilenamePasswd(filename string) error {
 	})
 }
 
-func (sysroot *Sysroot) FeedByCurrentFiles() error {
-	log.Debug("start")
+func (sysroot *Sysroot) FeedByFiles(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
 	var filename string
 
-	filename = sysroot.Path + "/etc/shadow"
+	filename = filepath.Join(where, "/etc/shadow")
 	if err := sysroot.parseFilenameShadow(filename); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
@@ -684,7 +671,7 @@ func (sysroot *Sysroot) FeedByCurrentFiles() error {
 		}).Debug(err)
 	}
 
-	filename = sysroot.Path + "/etc/group"
+	filename = filepath.Join(where, "/etc/group")
 	if err := sysroot.parseFilenameGroup(filename); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
@@ -692,7 +679,7 @@ func (sysroot *Sysroot) FeedByCurrentFiles() error {
 		}).Debug(err)
 	}
 
-	filename = sysroot.Path + "/etc/passwd"
+	filename = filepath.Join(where, "/etc/passwd")
 	if err := sysroot.parseFilenamePasswd(filename); err != nil {
 		log.WithFields(log.Fields{
 			"filename": filename,
@@ -720,8 +707,10 @@ func writeFile(filename string, content []byte, mode fs.FileMode, uid int, gid i
 	return nil
 }
 
-func (sr *Sysroot) writeShadow() error {
-	log.Debug("start")
+func (sr *Sysroot) writeShadow(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
 	if len(sr.Shadows) == 0 {
@@ -729,50 +718,53 @@ func (sr *Sysroot) writeShadow() error {
 	}
 
 	content := ""
-	for _, shadow := range sr.Shadows {
-		if line, err := shadow.Marshal(); err != nil {
+	for _, s := range sr.Shadows {
+		if line, err := s.Marshal(); err != nil {
 			return err
 		} else {
 			content += fmt.Sprintln(line)
 		}
 	}
 
-	filename := sr.Path + "/etc/shadow"
+	dst := filepath.Join(where, "/etc/shadow")
 	mode := fs.FileMode(0600)
-	return writeFile(filename, []byte(content), mode, 0, 0)
+	return writeFile(dst, []byte(content), mode, 0, 0)
 }
 
-func (sr *Sysroot) writeGroups() error {
-	log.Debug("start")
+func (sr *Sysroot) writeGroups(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
 	if len(sr.Groups) == 0 {
 		return nil
 	}
 
-	filename := sr.Path + "/etc/group"
-	mode := fs.FileMode(0644)
 	content := ""
-	for _, group := range sr.Groups {
-		if line, err := group.Marshal(); err != nil {
+	for _, g := range sr.Groups {
+		if line, err := g.Marshal(); err != nil {
 			return err
 		} else {
 			content += fmt.Sprintln(line)
 		}
 	}
-	return writeFile(filename, []byte(content), mode, 0, 0)
+
+	dst := filepath.Join(where, "/etc/group")
+	mode := fs.FileMode(0644)
+	return writeFile(dst, []byte(content), mode, 0, 0)
 }
 
-func (sr *Sysroot) writeUsers() error {
-	log.Debug("start")
+func (sr *Sysroot) writeUsers(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
 	if len(sr.Users) == 0 {
 		return nil
 	}
 
-	filename := sr.Path + "/etc/passwd"
-	mode := fs.FileMode(0644)
 	content := ""
 	for _, user := range sr.Users {
 		if line, err := user.Marshal(); err != nil {
@@ -781,21 +773,27 @@ func (sr *Sysroot) writeUsers() error {
 			content += fmt.Sprintln(line)
 		}
 	}
-	return writeFile(filename, []byte(content), mode, 0, 0)
+
+	dst := filepath.Join(where, "/etc/passwd")
+	mode := fs.FileMode(0644)
+	return writeFile(dst, []byte(content), mode, 0, 0)
 }
 
-func (sysroot *Sysroot) writeLinks() error {
-	log.Debug("start")
+func (sysroot *Sysroot) writeLinks(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
-	for _, link := range sysroot.Links {
+	for _, l := range sysroot.Links {
+		dst := filepath.Join(where, l.Path)
 		if err := common.CreateSymlink(
-			link.Path,
-			link.Target,
-			link.Overwrite,
-			link.Uid,
-			link.Gid,
-			link.Hard,
+			dst,
+			l.Target,
+			l.Overwrite,
+			l.Uid,
+			l.Gid,
+			l.Hard,
 		); err != nil {
 			return err
 		}
@@ -803,36 +801,41 @@ func (sysroot *Sysroot) writeLinks() error {
 	return nil
 }
 
-func (sysroot *Sysroot) writeDirectories() error {
-	log.Debug("start")
+func (sysroot *Sysroot) writeDirectories(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
-	for _, directory := range sysroot.Directories {
-		if err := os.MkdirAll(sysroot.Path+directory.Path, directory.Mode); err != nil {
+	for _, d := range sysroot.Directories {
+		dst := filepath.Join(where, d.Path)
+		if err := os.MkdirAll(dst, d.Mode); err != nil {
 			return err
 		}
-		if err := os.Chown(sysroot.Path+directory.Path, directory.Uid, directory.Uid); err != nil {
+		if err := os.Chown(dst, d.Uid, d.Uid); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (sysroot *Sysroot) writeFiles() error {
-	log.Debug("start")
+func (sysroot *Sysroot) writeFiles(where string) error {
+	log.WithFields(log.Fields{
+		"where": where,
+	}).Debug("start")
 	defer log.Debug("end")
 
-	for _, file := range sysroot.Files {
-		filename := sysroot.Path + file.Filename
+	for _, f := range sysroot.Files {
+		dst := filepath.Join(where, f.Filename)
 
 		// If overwrite == false and file exists, skip it
-		if !file.Overwrite {
-			if _, err := os.Stat(filename); err == nil {
+		if !f.Overwrite {
+			if _, err := os.Stat(dst); err == nil {
 				continue
 			}
 		}
 
-		if err := writeFile(filename, file.Content, file.Mode, file.Uid, file.Gid); err != nil {
+		if err := writeFile(dst, f.Content, f.Mode, f.Uid, f.Gid); err != nil {
 			return err
 		}
 	}
@@ -840,50 +843,39 @@ func (sysroot *Sysroot) writeFiles() error {
 }
 
 // Commit all changes to Sysroot.Path
-func (sysroot *Sysroot) Write() error {
+func (sysroot *Sysroot) Write(where string) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 	}).Debug("start")
 	log.Debug("end")
 
-	if err := sysroot.writeLinks(); err != nil {
+	if !common.IsDir(where) {
+		return fmt.Errorf("%q is not a directory", where)
+	}
+
+	if err := sysroot.writeLinks(where); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.writeDirectories(); err != nil {
+	if err := sysroot.writeDirectories(where); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.writeFiles(); err != nil {
+	if err := sysroot.writeFiles(where); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.writeShadow(); err != nil {
+	if err := sysroot.writeShadow(where); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.writeGroups(); err != nil {
+	if err := sysroot.writeGroups(where); err != nil {
 		log.Error(err)
 		return err
 	}
-	if err := sysroot.writeUsers(); err != nil {
+	if err := sysroot.writeUsers(where); err != nil {
 		log.Error(err)
 		return err
 	}
 	return nil
-}
-
-func New(path string) (*Sysroot, error) {
-	log.Debug("start")
-	defer log.Debug("end")
-
-	if !common.IsDir(path) {
-		return nil, fmt.Errorf("%q is not a directory", path)
-	}
-
-	result := Sysroot{
-		Path: path,
-	}
-
-	return &result, nil
 }

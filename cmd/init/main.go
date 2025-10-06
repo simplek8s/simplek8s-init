@@ -113,7 +113,7 @@ func switchRoot(where string) error {
 	}
 	if config != nil {
 		// Populate current chrooted "/" using bootstrap config.
-		sr, err := sysroot.New("/")
+		sr := sysroot.Sysroot{}
 		if err != nil {
 			log.WithError(err).Error("can not create sysroot config")
 			return err
@@ -122,7 +122,7 @@ func switchRoot(where string) error {
 			log.WithError(err).Error("can not feed by bootstrap config")
 			return err
 		}
-		if err := sr.Write(); err != nil {
+		if err := sr.Write("/"); err != nil {
 			log.WithError(err).Error("can not write sysroot config")
 			return err
 		}

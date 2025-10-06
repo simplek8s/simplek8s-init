@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -28,7 +29,7 @@ func TestIsIntInList(t *testing.T) {
 	}
 
 	for _, tc := range tdd {
-		if got := isIntInList(tc.entry, tc.list); got != tc.found {
+		if got := slices.Contains(tc.list, tc.entry); got != tc.found {
 			t.Errorf("list %v, entry %d, got %t, want %t", tc.list, tc.entry, got, tc.found)
 		}
 	}
