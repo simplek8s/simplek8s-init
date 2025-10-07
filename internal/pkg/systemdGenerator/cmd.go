@@ -33,19 +33,15 @@ func CmdSystemdGenerator(generatorDir string, earlyDir string, lateDir string) e
 			return err
 		}
 	} else {
-		sr, err := sr.New("/")
-		if err != nil {
-			log.Error(err)
-			return err
-		}
+		sr := sr.Sysroot{}
 
-		if err := sysroot.CmdSystemdGeneratorSysroot(sr, generatorDir); err != nil {
+		if err := sysroot.CmdSystemdGeneratorSysroot(&sr, generatorDir); err != nil {
 			log.Error(err)
 			return err
 		}
 
 		// Commit sysroot
-		if err := sr.Write(); err != nil {
+		if err := sr.Write("/"); err != nil {
 			log.Error(err)
 			return err
 		}

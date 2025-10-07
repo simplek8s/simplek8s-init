@@ -23,20 +23,18 @@ func Test_populateSysrootSshd(t *testing.T) {
 		t.Run(tname, func(t *testing.T) {
 			t.Parallel()
 
+			sr := sysroot.Sysroot{}
+
+			if err := populateSysrootSshd(output, &sr, allowRootPassword); err != nil {
+				t.Fatal(err)
+			}
+
 			dst := filepath.Join(output, "/usr/share/factory")
 			if err := os.MkdirAll(dst, 0755); err != nil {
 				t.Fatal(err)
 			}
-			sr, err := sysroot.New(dst)
-			if err != nil {
-				t.Fatal(err)
-			}
 
-			if err := populateSysrootSshd(output, sr, allowRootPassword); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := sr.Write(); err != nil {
+			if err := sr.Write(dst); err != nil {
 				t.Fatal(err)
 			}
 

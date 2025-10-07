@@ -245,15 +245,9 @@ func CmdPopulateSysroot(output string) error {
 	sshAllowRootPassword := config == nil
 	generateRootPassword := config == nil
 
-	sr, err := sysroot.New(output)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"output": output,
-		}).Error(err)
-		return err
-	}
+	sr := sysroot.Sysroot{}
 
-	if err := populateSysrootSshd(output, sr, sshAllowRootPassword); err != nil {
+	if err := populateSysrootSshd(output, &sr, sshAllowRootPassword); err != nil {
 		log.WithFields(log.Fields{
 			"output":               output,
 			"sr":                   sr,
@@ -262,7 +256,7 @@ func CmdPopulateSysroot(output string) error {
 		return err
 	}
 
-	if err := populateSysrootUsers(output, sr, generateRootPassword); err != nil {
+	if err := populateSysrootUsers(output, &sr, generateRootPassword); err != nil {
 		log.WithFields(log.Fields{
 			"output":           output,
 			"sr":               sr,
@@ -283,7 +277,7 @@ func CmdPopulateSysroot(output string) error {
 	}
 
 	// Commit sysroot
-	if err := sr.Write(); err != nil {
+	if err := sr.Write(output); err != nil {
 		log.Error(err)
 		return err
 	}

@@ -16,22 +16,22 @@ func PopulateRoot(where string) error {
 		dst string
 		opt *cp.CopyOptions
 	}{
-		{
-			src: "/etc/passwd",
-			dst: filepath.Join(where, "/etc/passwd"),
-			opt: &cp.CopyOptions{
-				PreserveAll: true,
-				Overwrite:   true,
-			},
-		},
-		{
-			src: "/etc/shadow",
-			dst: filepath.Join(where, "/etc/shadow"),
-			opt: &cp.CopyOptions{
-				PreserveAll: true,
-				Overwrite:   true,
-			},
-		},
+		// {
+		// 	src: "/etc/passwd",
+		// 	dst: filepath.Join(where, "/etc/passwd"),
+		// 	opt: &cp.CopyOptions{
+		// 		PreserveAll: true,
+		// 		Overwrite:   true,
+		// 	},
+		// },
+		// {
+		// 	src: "/etc/shadow",
+		// 	dst: filepath.Join(where, "/etc/shadow"),
+		// 	opt: &cp.CopyOptions{
+		// 		PreserveAll: true,
+		// 		Overwrite:   true,
+		// 	},
+		// },
 		{
 			src: "/usr",
 			dst: filepath.Join(where, "/usr"),

@@ -177,3 +177,67 @@ func CheckFileExists(filePath string) bool {
 	_, error := os.Stat(filePath)
 	return !errors.Is(error, os.ErrNotExist)
 }
+
+// UpdateOrAppend returns a new slice where `newItem` replaces an existing element
+// that matches according to the `equals` function, or is appended if no match is found.
+//
+// This function makes a shallow copy of the input slice before modifying it,
+// ensuring the original slice remains unchanged.
+//
+// Parameters:
+//   - items:    Original slice of elements.
+//   - newItem:  Element to insert or update.
+//   - equals:   Function used to determine equality between elements.
+//
+// Example:
+//
+//	newList := UpdateOrAppend(users, newUser, func(a, b User) bool {
+//	    return a.Name == b.Name
+//	})
+func UpdateOrAppend[T any](items []T, newItem T, equals func(a, b T) bool) []T {
+	log.WithFields(log.Fields{
+		"items":   items,
+		"newItem": newItem,
+		"equals":  equals,
+	}).Debug("start")
+	defer log.Debug("end")
+
+	newItems := make([]T, len(items))
+	copy(newItems, items)
+
+	for i, oldItem := range newItems {
+		if equals(oldItem, newItem) {
+			newItems[i] = newItem
+			return newItems
+		}
+	}
+
+	return append(newItems, newItem)
+}
+
+// GetOrDefault returns the value pointed to by `ptr` if it is not nil,
+// otherwise it returns the provided `fallback` value.
+//
+// This function is useful for handling optional pointer values safely,
+// without needing explicit nil checks.
+//
+// Parameters:
+//   - ptr:      A pointer to a value of type T (may be nil).
+//   - fallback: Default value to return if ptr is nil.
+//
+// Example:
+//
+//	var flag *bool
+//	result := GetOrDefault(flag, true) // returns true since flag is nil
+func GetOrDefault[T any](ptr *T, fallback T) T {
+	log.WithFields(log.Fields{
+		"ptr":      ptr,
+		"fallback": fallback,
+	}).Debug("start")
+	defer log.Debug("end")
+
+	if ptr != nil {
+		return *ptr
+	}
+	return fallback
+}

@@ -3,6 +3,7 @@ package common
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -142,4 +143,113 @@ func TestCheckFileExists(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateOrAppend(t *testing.T) {
+	// Example struct for testing.
+	type Person struct {
+		Name string
+		Age  int
+	}
+
+	// Simple equals function for Person.
+	personEquals := func(a, b Person) bool {
+		return a.Name == b.Name
+	}
+
+	tests := []struct {
+		name     string
+		items    []Person
+		newItem  Person
+		expected []Person
+	}{
+		{
+			name:     "empty slice - append new item",
+			items:    []Person{},
+			newItem:  Person{Name: "Alice", Age: 30},
+			expected: []Person{{Name: "Alice", Age: 30}},
+		},
+		{
+			name: "no match - append new item",
+			items: []Person{
+				{Name: "Bob", Age: 25},
+			},
+			newItem: Person{Name: "Charlie", Age: 40},
+			expected: []Person{
+				{Name: "Bob", Age: 25},
+				{Name: "Charlie", Age: 40},
+			},
+		},
+		{
+			name: "match found - update existing item",
+			items: []Person{
+				{Name: "Alice", Age: 30},
+				{Name: "Bob", Age: 25},
+			},
+			newItem: Person{Name: "Bob", Age: 26}, // updated age.
+			expected: []Person{
+				{Name: "Alice", Age: 30},
+				{Name: "Bob", Age: 26},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UpdateOrAppend(tt.items, tt.newItem, personEquals)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("expected %+v, got %+v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestGetOrDefault(t *testing.T) {
+	t.Run("bool pointer is nil", func(t *testing.T) {
+		var ptr *bool
+		result := GetOrDefault(ptr, true)
+		if result != true {
+			t.Errorf("expected true, got %v", result)
+		}
+	})
+
+	t.Run("bool pointer is not nil", func(t *testing.T) {
+		val := false
+		result := GetOrDefault(&val, true)
+		if result != false {
+			t.Errorf("expected false, got %v", result)
+		}
+	})
+
+	t.Run("string pointer is nil", func(t *testing.T) {
+		var name *string
+		result := GetOrDefault(name, "default")
+		if result != "default" {
+			t.Errorf("expected 'default', got %q", result)
+		}
+	})
+
+	t.Run("string pointer is not nil", func(t *testing.T) {
+		value := "hello"
+		result := GetOrDefault(&value, "default")
+		if result != "hello" {
+			t.Errorf("expected 'hello', got %q", result)
+		}
+	})
+
+	t.Run("int pointer is nil", func(t *testing.T) {
+		var number *int
+		result := GetOrDefault(number, 42)
+		if result != 42 {
+			t.Errorf("expected 42, got %v", result)
+		}
+	})
+
+	t.Run("int pointer is not nil", func(t *testing.T) {
+		val := 99
+		result := GetOrDefault(&val, 0)
+		if result != 99 {
+			t.Errorf("expected 99, got %v", result)
+		}
+	})
 }

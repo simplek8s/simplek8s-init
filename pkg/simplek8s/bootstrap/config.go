@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -83,7 +82,7 @@ type Config struct {
 
 func (c *Config) String() string {
 	j, _ := json.Marshal(c)
-	return fmt.Sprintf("%s", string(j))
+	return string(j)
 }
 
 // waitForAnyFile waits for any of the provided paths to exist, with a timeout.
@@ -260,7 +259,7 @@ func unmarshal(yamlContent []byte) (*Config, error) {
 // TODO: Add AWS user-data from API support.
 // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 // http://169.254.169.254/latest/user-data
-func getConfigContentFromUserData(ctx context.Context) ([]byte, error) {
+func getConfigContentFromUserData(_ context.Context) ([]byte, error) {
 	log.Debug("start")
 	defer log.Debug("end")
 

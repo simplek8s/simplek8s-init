@@ -57,6 +57,9 @@ func getNumberOfDaysFrom1970() int {
 	return int(days)
 }
 
+// Create a Shadow with safe default values.
+//   - if password is empty, will be set as "!!"
+//   - if lastChanged is nil, will be set as current number of days from 1970.
 func NewShadow(shadow Shadow) Shadow {
 	if len(shadow.Name) == 0 {
 		panic("name is required")
@@ -81,14 +84,9 @@ func (shadow Shadow) Marshal() (string, error) {
 	}
 
 	password := shadow.Password
-	if len(shadow.Password) == 0 {
-		return "", errors.New(`password is required (ex: could be "!!")`)
-	}
 
-	var lastChanged string
-	if shadow.LastChanged == nil {
-		return "", errors.New(`lastChanged is required`)
-	} else {
+	lastChanged := ""
+	if shadow.LastChanged != nil {
 		lastChanged = fmt.Sprint(*shadow.LastChanged)
 	}
 
@@ -128,7 +126,14 @@ func (shadow Shadow) Marshal() (string, error) {
 }
 
 func UnmarshalShadow(entry string, shadow *Shadow) error {
-	for index, value := range strings.Split(entry, ":") {
+	tokens := strings.Split(entry, ":")
+
+	nFields := 9
+	if len(tokens) != nFields {
+		return fmt.Errorf("invalid number of fields in entry: %s, got: %d, want: %d", entry, len(tokens), nFields)
+	}
+
+	for index, value := range tokens {
 		switch index {
 		case 0:
 			shadow.Name = value
