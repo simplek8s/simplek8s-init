@@ -31,12 +31,12 @@ import (
 )
 
 // Create and mount /sysroot.
-func mountNextRoot() (where string, err error) {
+func mountNextRoot(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
 
 	nextRoot := linux.MountPoint{
-		Target: "/sysroot",
+		Target: where,
 		Chmod:  0755,
 		Source: "tmpfs",
 		Fstype: "tmpfs",
@@ -45,15 +45,15 @@ func mountNextRoot() (where string, err error) {
 	}
 
 	if err := linux.Mount(nextRoot); err != nil {
-		return "", err
+		return err
 	}
 
 	// if err := linux.MountPseudoFS(where); err != nil {
 	// 	log.WithError(err).Error("can not mount pseudofs into " + where)
-	// 	return "", err
+	// 	return err
 	// }
 
-	return nextRoot.Target, nil
+	return nil
 }
 
 func populateUsr(where string) error {
@@ -93,9 +93,14 @@ func populateUsr(where string) error {
 	return nil
 }
 
-func populateNextRoot(where string) error {
+func createNextRoot(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
+
+	if err := mountNextRoot(where); err != nil {
+		log.WithError(err).Error("can not mount next root " + where)
+		return err
+	}
 
 	//TODO: Mount `{where}/var`.
 
@@ -127,7 +132,7 @@ func populateNextRoot(where string) error {
 	// Retrive SimpleK8s bootstrap config.
 	config, err := bootstrap.GetConfig()
 	if err != nil {
-		log.WithError(err).Error("can not fetch bootstrap config")
+		log.WithError(err).Warn("can not fetch bootstrap config")
 	} else if config != nil {
 		if err := bootstrap.FeedSysrootByBootstrapConfig(sr, *config); err != nil {
 			log.WithError(err).Error("can not feed by bootstrap config")
@@ -202,27 +207,27 @@ func (f *KmsgFormatter) Format(entry *log.Entry) ([]byte, error) {
 	return fmt.Appendf(nil, "<%d>%s[%d]: %s", level, f.Ident, os.Getpid(), msg), nil
 }
 
-// main will:
-//   - Mount /sysroot
-//   - Populate /sysroot
-//   - Switch root to /sysroot
+// It:
+//   - Opens /dev/kmsg for kernel‑message logging.
+//   - Configures the logger.
+//   - Verifies that the process is PID 1.
+//   - Prepares the next root filesystem and switches to it.
+//   - Exits cleanly.
 func main() {
-	if err := linux.Mount(linux.Mountpoints.Dev); err != nil {
-		log.SetOutput(os.Stdout)
-		log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
-	}
-
 	// kernel-parameters for debug: ignore_loglevel ignore_rlimit_data
-
-	kmsg, err := os.OpenFile("/dev/kmsg", os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.SetOutput(os.Stdout)
+	if err := linux.Mount(linux.Mountpoints.Dev); err != nil {
 		log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
+		log.SetOutput(os.Stdout)
 	} else {
-		defer kmsg.Close()
+		kmsg, err := os.OpenFile("/dev/kmsg", os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
+			log.SetOutput(os.Stdout)
+		} else {
+			defer kmsg.Close()
+			log.SetOutput(kmsg)
+		}
 	}
-	log.SetOutput(kmsg)
-
 	log.SetFormatter(&KmsgFormatter{Ident: "simplek8s-init"})
 	log.SetLevel(log.InfoLevel)
 
@@ -234,12 +239,9 @@ func main() {
 		log.Fatal("not PID 1")
 	}
 
-	where, err := mountNextRoot()
-	if err != nil {
-		log.WithError(err).Fatal("can not mount next root")
-	}
+	where := "/sysroot"
 
-	if err := populateNextRoot(where); err != nil {
+	if err := createNextRoot(where); err != nil {
 		log.WithError(err).Fatal("can not populate next root " + where)
 	}
 
