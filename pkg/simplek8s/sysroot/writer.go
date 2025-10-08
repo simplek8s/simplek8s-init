@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/jlsalvador/simplek8s/pkg/common"
+	"github.com/jlsalvador/simplek8s/pkg/linux"
 	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
 	log "github.com/sirupsen/logrus"
 )
@@ -33,6 +35,68 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 	if err := os.Chown(filename, uid, gid); err != nil {
 		return err
 	}
+	return nil
+}
+
+func writeMounts(mounts []Mount, where string) error {
+	log.WithFields(log.Fields{
+		"mounts": mounts,
+		"where":  where,
+	}).Debug("start")
+	defer log.Debug("end")
+
+	// We will use systemd units to mount these mountpoints.
+
+	// These units must be saved into /run/systemd/system/.
+	// So we need to mount `${where}/run` before.
+	runMnt := linux.Mountpoints.Run
+	runMnt.Target = filepath.Join(where, runMnt.Target)
+	if err := linux.Mount(runMnt); err != nil {
+		log.WithError(err).Error("can not mount " + runMnt.Target)
+		return err
+	}
+
+	// Create systemd mount unit for each mountpoint into `${where}/run/systemd/system/`.
+	for _, m := range mounts {
+		var dst string
+		var content string
+
+		if m.Where == "/var" {
+			dst = filepath.Join(where, "/run/systemd/system/var.mount.d/drop-in.conf")
+			content = fmt.Sprintf(`
+[Mount]
+What=%s
+Where=%s
+Type=%s
+Options=%s
+`, m.What, m.Where, m.Type, m.Options)
+		} else {
+			escapedName := unit.UnitNameEscape(m.Where)
+			unitName := fmt.Sprintf("%s.mount", escapedName)
+			dst = filepath.Join(where, "/run/systemd/system/", unitName)
+			content = fmt.Sprintf(`
+[Unit]
+Description=%s mountpoint
+DefaultDependencies=no
+Conflicts=umount.target
+Before=local-fs.target
+Before=umount.target
+After=network.target
+
+[Mount]
+What=%s
+Where=%s
+Type=%s
+Options=%s
+`, escapedName, m.What, m.Where, m.Type, m.Options)
+		}
+
+		if err := ensureWriteFile(dst, []byte(content), 0644, 0, 0); err != nil {
+			log.WithError(err).Error("can not write mount unit " + dst)
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -195,28 +259,32 @@ func (sr *Sysroot) Write(where string) error {
 		return fmt.Errorf("%q is not a directory", where)
 	}
 
+	if err := writeMounts(sr.Mounts, where); err != nil {
+		log.WithError(err).Error("can not write mounts")
+		return err
+	}
 	if err := writeLinks(sr.Links, where); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not write links")
 		return err
 	}
 	if err := writeDirectories(sr.Directories, where); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not write directories")
 		return err
 	}
 	if err := writeFiles(sr.Files, where); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not write files")
 		return err
 	}
 	if err := writeShadows(sr.Shadows, where); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/shadow"))
 		return err
 	}
 	if err := writeGroups(sr.Groups, where); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/groups"))
 		return err
 	}
 	if err := writeUsers(sr.Users, where); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/passwd"))
 		return err
 	}
 

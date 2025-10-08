@@ -57,6 +57,7 @@ func mountNextRoot(where string) error {
 }
 
 func populateUsr(where string) error {
+	// Mount tmpfs as /usr.
 	usr := linux.MountPoint{
 		Target: where,
 		Chmod:  0755,
@@ -70,14 +71,25 @@ func populateUsr(where string) error {
 		log.WithError(err).Error("can not mount tmpfs into " + where)
 	}
 
+	// Populate /usr from initrd.
 	if err := cp.Copy("/usr", where, &cp.CopyOptions{
 		PreserveAll: true,
 		Overwrite:   true,
 	}); err != nil {
-		log.Error(err)
+		log.WithError(err).Error("can not copy from /usr to " + where)
 		return err
 	}
 
+	// Create /usr/libexec and /usr/local for future bind mounts from /var.
+	for _, d := range []string{"/libexec", "/local"} {
+		dst := filepath.Join(where, d)
+		if err := os.MkdirAll(dst, 0755); err != nil {
+			log.WithError(err).Error("can not create directory " + dst)
+			return err
+		}
+	}
+
+	// Remount /usr as RO.
 	if err := linux.Mount(linux.MountPoint{
 		Target: usr.Target,
 		Chmod:  usr.Chmod,
@@ -102,10 +114,6 @@ func createNextRoot(where string) error {
 		return err
 	}
 
-	//TODO: Mount `{where}/var`.
-
-	//TODO: Mount `{where}/var` binds into `{where}/`.
-
 	usrDst := filepath.Join(where, "/usr")
 	if err := populateUsr(usrDst); err != nil {
 		log.WithError(err).Error("can not populate " + usrDst)
@@ -125,10 +133,6 @@ func createNextRoot(where string) error {
 		return err
 	}
 
-	//DEBUG: Print out the sysroot structure.
-	// o, _ := json.MarshalIndent(sr, "", " ")
-	// fmt.Printf("sr: %s\n", o)
-
 	// Retrive SimpleK8s bootstrap config.
 	config, err := bootstrap.GetConfig()
 	if err != nil {
@@ -139,6 +143,10 @@ func createNextRoot(where string) error {
 			return err
 		}
 	}
+
+	//DEBUG: Print out the sysroot structure.
+	// o, _ := json.MarshalIndent(sr, "", " ")
+	// fmt.Printf("sr: %s\n", o)
 
 	//DEBUG: Drop to shell.
 	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())

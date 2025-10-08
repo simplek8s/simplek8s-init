@@ -139,7 +139,8 @@ func updateOrAppendFile(files []sr.File, file sr.File) []sr.File {
 
 func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
-		"config": config,
+		"sysroot": sysroot,
+		"config":  config,
 	}).Debug("start")
 	defer log.Debug("end")
 
@@ -166,7 +167,8 @@ func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
 
 func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
-		"config": config,
+		"sysroot": sysroot,
+		"config":  config,
 	}).Debug("start")
 	defer log.Debug("end")
 
@@ -274,7 +276,8 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 
 func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
-		"config": config,
+		"sysroot": sysroot,
+		"config":  config,
 	}).Debug("start")
 	defer log.Debug("end")
 
@@ -310,7 +313,8 @@ func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 
 func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
-		"config": config,
+		"sysroot": sysroot,
+		"config":  config,
 	}).Debug("start")
 	defer log.Debug("end")
 
@@ -369,7 +373,8 @@ func getBytesFromEncoding(encoding *string, content *string) []byte {
 
 func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
-		"config": config,
+		"sysroot": sysroot,
+		"config":  config,
 	}).Debug("start")
 	defer log.Debug("end")
 
@@ -413,6 +418,25 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 	return nil
 }
 
+func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
+	log.WithFields(log.Fields{
+		"sysroot": sysroot,
+		"config":  config,
+	}).Debug("start")
+	defer log.Debug("end")
+
+	for _, m := range config.Storage.Mounts {
+		sysroot.Mounts = append(sysroot.Mounts, sr.Mount{
+			What:    m.What,
+			Where:   m.Where,
+			Type:    common.GetOrDefault(m.Type, ""),
+			Options: common.GetOrDefault(m.Options, ""),
+		})
+	}
+
+	return nil
+}
+
 func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
@@ -437,6 +461,10 @@ func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 		return err
 	}
 	if err := feedByBootstrapConfigFiles(sysroot, config); err != nil {
+		log.Error(err)
+		return err
+	}
+	if err := feedByBootstrapConfigMounts(sysroot, config); err != nil {
 		log.Error(err)
 		return err
 	}

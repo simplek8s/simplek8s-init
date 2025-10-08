@@ -52,10 +52,12 @@ var Mountpoints = struct {
 	Dev  MountPoint
 	Sys  MountPoint
 	Proc MountPoint
+	Run  MountPoint
 }{
 	Dev:  MountPoint{"/dev", 0755, "devtmpfs", "devtmpfs", unix.MS_NOSUID | unix.MS_STRICTATIME, ""},
 	Sys:  MountPoint{"/sys", 0555, "sysfs", "sysfs", 0, ""},
 	Proc: MountPoint{"/proc", 0555, "proc", "proc", 0, ""},
+	Run:  MountPoint{"/run", 0755, "tmpfs", "tmpfs", unix.MS_NOSUID | unix.MS_NODEV, ""},
 }
 
 func MountPseudoFS(where string) error {
