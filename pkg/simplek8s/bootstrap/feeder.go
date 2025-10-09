@@ -162,6 +162,7 @@ func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
 			return a.Name == b.Name
 		})
 	}
+
 	return nil
 }
 
@@ -275,6 +276,7 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -285,33 +287,35 @@ func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 	}).Debug("start")
 	defer log.Debug("end")
 
-	if config.Storage != nil {
-
-		// Set UID and GID from own process by default
-		defaultUid, defaultGid := common.GetOwnUidGid()
-
-		for _, link := range config.Storage.Links {
-			uid := defaultUid
-			gid := defaultGid
-			if link.Owner != nil {
-				uid, gid = getUidGidFromString(*link.Owner, sysroot.Groups, sysroot.Users)
-			}
-
-			isOverwrite := common.GetOrDefault(link.Overwrite, false)
-			isHard := common.GetOrDefault(link.Hard, false)
-
-			sysroot.Links = common.UpdateOrAppend(sysroot.Links, sr.Link{
-				Overwrite: isOverwrite,
-				Path:      link.Path,
-				Target:    link.Target,
-				Uid:       uid,
-				Gid:       gid,
-				Hard:      isHard,
-			}, func(a, b sr.Link) bool {
-				return a.Path == b.Path
-			})
-		}
+	if config.Storage == nil || config.Storage.Links == nil {
+		return nil
 	}
+
+	// Set UID and GID from own process by default
+	defaultUid, defaultGid := common.GetOwnUidGid()
+
+	for _, link := range config.Storage.Links {
+		uid := defaultUid
+		gid := defaultGid
+		if link.Owner != nil {
+			uid, gid = getUidGidFromString(*link.Owner, sysroot.Groups, sysroot.Users)
+		}
+
+		isOverwrite := common.GetOrDefault(link.Overwrite, false)
+		isHard := common.GetOrDefault(link.Hard, false)
+
+		sysroot.Links = common.UpdateOrAppend(sysroot.Links, sr.Link{
+			Overwrite: isOverwrite,
+			Path:      link.Path,
+			Target:    link.Target,
+			Uid:       uid,
+			Gid:       gid,
+			Hard:      isHard,
+		}, func(a, b sr.Link) bool {
+			return a.Path == b.Path
+		})
+	}
+
 	return nil
 }
 
@@ -322,40 +326,42 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 	}).Debug("start")
 	defer log.Debug("end")
 
-	if config.Storage != nil {
-
-		// Set UID and GID from own process by default
-		defaultUid, defaultGid := common.GetOwnUidGid()
-
-		for _, directory := range config.Storage.Directories {
-			isOverwrite := common.GetOrDefault(directory.Overwrite, false)
-
-			uid := defaultUid
-			gid := defaultGid
-			if directory.Owner != nil {
-				uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
-			}
-
-			var mode fs.FileMode = 0775
-			if directory.Permissions != nil {
-				if valueAsInt, err := strconv.Atoi(*directory.Permissions); err != nil {
-					return err
-				} else {
-					mode = fs.FileMode(valueAsInt)
-				}
-			}
-
-			sysroot.Directories = common.UpdateOrAppend(sysroot.Directories, sr.Directory{
-				Overwrite: isOverwrite,
-				Path:      directory.Path,
-				Mode:      mode,
-				Uid:       uid,
-				Gid:       gid,
-			}, func(a, b sr.Directory) bool {
-				return a.Path == b.Path
-			})
-		}
+	if config.Storage == nil || config.Storage.Directories == nil {
+		return nil
 	}
+
+	// Set UID and GID from own process by default
+	defaultUid, defaultGid := common.GetOwnUidGid()
+
+	for _, directory := range config.Storage.Directories {
+		isOverwrite := common.GetOrDefault(directory.Overwrite, false)
+
+		uid := defaultUid
+		gid := defaultGid
+		if directory.Owner != nil {
+			uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
+		}
+
+		var mode fs.FileMode = 0775
+		if directory.Permissions != nil {
+			if valueAsInt, err := strconv.Atoi(*directory.Permissions); err != nil {
+				return err
+			} else {
+				mode = fs.FileMode(valueAsInt)
+			}
+		}
+
+		sysroot.Directories = common.UpdateOrAppend(sysroot.Directories, sr.Directory{
+			Overwrite: isOverwrite,
+			Path:      directory.Path,
+			Mode:      mode,
+			Uid:       uid,
+			Gid:       gid,
+		}, func(a, b sr.Directory) bool {
+			return a.Path == b.Path
+		})
+	}
+
 	return nil
 }
 
@@ -382,43 +388,45 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 	}).Debug("start")
 	defer log.Debug("end")
 
-	if config.Storage != nil {
-
-		// Set UID and GID from own process by default
-		defaultUid, defaultGid := common.GetOwnUidGid()
-
-		for _, file := range config.Storage.Files {
-			filename := file.Path
-			isOverwrite := common.GetOrDefault(file.Overwrite, false)
-
-			uid := defaultUid
-			gid := defaultGid
-			if file.Permissions != nil {
-				uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
-			}
-
-			var mode fs.FileMode = 0664
-			if file.Permissions != nil {
-				if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
-					log.Error(err)
-					return err
-				} else {
-					mode = fs.FileMode(valueAsInt)
-				}
-			}
-
-			content := getBytesFromEncoding(file.Encoding, file.Content)
-
-			sysroot.Files = updateOrAppendFile(sysroot.Files, sr.File{
-				Overwrite: isOverwrite,
-				Filename:  filename,
-				Content:   content,
-				Mode:      mode,
-				Uid:       uid,
-				Gid:       gid,
-			})
-		}
+	if config.Storage == nil || config.Storage.Files == nil {
+		return nil
 	}
+
+	// Set UID and GID from own process by default
+	defaultUid, defaultGid := common.GetOwnUidGid()
+
+	for _, file := range config.Storage.Files {
+		filename := file.Path
+		isOverwrite := common.GetOrDefault(file.Overwrite, false)
+
+		uid := defaultUid
+		gid := defaultGid
+		if file.Permissions != nil {
+			uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
+		}
+
+		var mode fs.FileMode = 0664
+		if file.Permissions != nil {
+			if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
+				log.Error(err)
+				return err
+			} else {
+				mode = fs.FileMode(valueAsInt)
+			}
+		}
+
+		content := getBytesFromEncoding(file.Encoding, file.Content)
+
+		sysroot.Files = updateOrAppendFile(sysroot.Files, sr.File{
+			Overwrite: isOverwrite,
+			Filename:  filename,
+			Content:   content,
+			Mode:      mode,
+			Uid:       uid,
+			Gid:       gid,
+		})
+	}
+
 	return nil
 }
 
@@ -428,6 +436,10 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 		"config":  config,
 	}).Debug("start")
 	defer log.Debug("end")
+
+	if config.Storage == nil || config.Storage.Mounts == nil {
+		return nil
+	}
 
 	for _, m := range config.Storage.Mounts {
 		sysroot.Mounts = append(sysroot.Mounts, sr.Mount{
