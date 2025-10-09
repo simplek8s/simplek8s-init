@@ -165,6 +165,10 @@ func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
 	return nil
 }
 
+// Users could feeds:
+//   - groups: user group.
+//   - directories: home users.
+//   - files: mostly ~/.ssh/authorized_keys.
 func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
@@ -448,7 +452,6 @@ func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 		log.Error(err)
 		return err
 	}
-	// Caution. Users could creates or update groups.
 	if err := feedByBootstrapConfigUsers(sysroot, config); err != nil {
 		log.Error(err)
 		return err

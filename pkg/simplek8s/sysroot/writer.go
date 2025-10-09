@@ -247,7 +247,6 @@ func writeFiles(files []File, where string) error {
 //   - Shadows
 //   - Groups
 //   - Users
-//   - sshAuthorizedKeys of each User if apply
 func (sr *Sysroot) Write(where string) error {
 	log.WithFields(log.Fields{
 		"where": where,
@@ -286,8 +285,6 @@ func (sr *Sysroot) Write(where string) error {
 		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/passwd"))
 		return err
 	}
-
-	//TODO: Write sshAuthorizedKeys of each User
 
 	return nil
 }
