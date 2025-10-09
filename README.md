@@ -11,15 +11,26 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
 
 - `version` (string): Currently must be `1`
 - _`users`_ (list of objects):
-  - `name` (string):
-  - _`passwordHash`_ (string): Default is "x".
-  - _`sshAuthorizedKeys`_ (list of string): Default is none.
+  - `name` (string): User name.
+  - DEPRECATED: ~~_`passwordHash`_ (string): Default is "x".~~
+  - DEPRECATED: ~~_`sshAuthorizedKeys`_ (list of string): Default is none.~~
+  - _`password_hash`_ (string): Default is "x".
+  - _`ssh_authorized_keys`_ (list of string): Default is none.
+  - _`uid`_ (int): Default is next unused uid.
+  - _`gid`_ (int): Default is the same value of uid.
+  - _`groups`_ (list of string): Default is none.
+  - _`system`_ (bool): Default is false.
+- _`groups`_ (list of objects):
+  - `name` (string): Group name.
+  - _`gid`_ (int): Group Id. Default is next unused gid.
+  - _`system`_ (bool): Default is false.
 - _`storage`_ (object):
   - _`mounts`_ (list of objects):
     - `what` (string)
     - `where` (string)
     - _`type`_ (string): Default is "auto".
     - _`options`_ (string): Default is "defaults".
+    - _`after`_ (list of string):
   - _`links`_ (list of objects):
     - _`overwrite`_ (bool): Default is false.
     - `path` (string)
@@ -45,12 +56,12 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
 ```yaml
 version: "1"
 users:
-  - name: "root"
-    sshAuthorizedKeys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com"
+  - name: root
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com
 storage:
   mounts:
-    - what: "/dev/disk/by-label/var"
+    - what: /dev/disk/by-label/var
       where: /var
 ```
 
@@ -61,28 +72,38 @@ storage:
 version: "1"
 
 users:
-  - name: "root"
+  - name: root
     # Password will be `root`
-    passwordHash: "\$6\$n2yzXErLUUm5/C38\$PtFZeevgw7A5LlD7J8WZlElsIl6yfpse4F6MeVx0GhIHn9WdHkVePiyd2x/kQE2UeJit.tKPn/Yez0fvL9O0K."
-    sshAuthorizedKeys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com"
+    password_hash: \$6\$n2yzXErLUUm5/C38\$PtFZeevgw7A5LlD7J8WZlElsIl6yfpse4F6MeVx0GhIHn9WdHkVePiyd2x/kQE2UeJit.tKPn/Yez0fvL9O0K.
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com
+    uid: 0
+    gid: 0
+    groups:
+      - ops
+    system: false
+
+groups:
+  - name: ops
+    gid: 1
+    system: true
 
 storage:
   mounts:
-    - what: "/dev/disk/by-label/var"
-      where: "/var"
+    - what: /dev/disk/by-label/var
+      where: /var
       type: "ext4"
-      options: "defaults"
+      options: defaults
 
-    - what: "/var/home"
-      where: "/home"
-      type: "none"
-      options: "bind"
+    - what: /var/home
+      where: /home
+      type: none
+      options: bind
 
-    - what: "10.0.0.123:/storage"
-      where: "/mnt/storage"
-      type: "nfs4"
-      options: "defaults"
+    - what: 10.0.0.123:/storage
+      where: /mnt/storage
+      type: nfs4
+      options: defaults
 
   links:
     - overwrite: false

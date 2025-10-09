@@ -3,6 +3,7 @@
 package sysroot
 
 import (
+	"encoding/json"
 	"io/fs"
 
 	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
@@ -49,4 +50,9 @@ type Sysroot struct {
 	Links       []Link
 	Directories []Directory
 	Files       []File
+}
+
+func (sr *Sysroot) String() string {
+	j, _ := json.MarshalIndent(sr, "", "  ")
+	return string(j)
 }

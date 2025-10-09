@@ -1,3 +1,5 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+
 package sysfs
 
 import (
@@ -5,9 +7,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jlsalvador/simplek8s/pkg/linux"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
+	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
+)
+
+// Injected functions for easier testing.
+var (
+	osStat    = os.Stat
+	osReadDir = os.ReadDir
+	doMount   = mount.Mount
+	doUnmount = mount.Unmount
 )
 
 // GetBlockDevices returns a slice containing the paths of all block devices
@@ -15,23 +23,20 @@ import (
 //
 // It reads `/sys/class/block` which lists the block device names, then
 // prefixes each name with `/dev/` to produce full device paths.
+//
+// In order to reads `/sys/class/block`, the pseudofs `sysfs` must` will be
+// mounted and unmounted automatically if it is necessary.
 func GetBlockDevices() ([]string, error) {
-	log.Debug("start")
-	defer log.Debug("end")
-
 	devices := []string{}
 
 	// Only mount & unmount "/sys" is there is not mounted already.
-	if _, err := os.Stat("/sys/class/block"); errors.Is(err, os.ErrNotExist) {
-		linux.Mount(linux.Mountpoints.Sys)
-		defer unix.Unmount(linux.Mountpoints.Sys.Target, 0)
-	} else {
-		log.Warn(err)
+	if _, err := osStat("/sys/class/block"); errors.Is(err, os.ErrNotExist) {
+		doMount(mount.Mountpoints.Sys)
+		defer doUnmount(mount.Mountpoints.Sys.Target, 0)
 	}
 
-	entries, err := os.ReadDir("/sys/class/block")
+	entries, err := osReadDir("/sys/class/block")
 	if err != nil {
-		log.Error(err)
 		return nil, err
 	}
 

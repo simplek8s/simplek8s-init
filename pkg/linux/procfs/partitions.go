@@ -1,3 +1,5 @@
+// Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+
 package procfs
 
 import (
@@ -9,16 +11,19 @@ import (
 )
 
 type Partitions struct {
-	// The Major number of the device with this partition.
-	Major int64
-	// The Minor number of the device with this partition.
-	Minor int64
-	// Lists the number of physical disk Blocks contained in a particular partition.
-	Blocks int64
-	// The Name of the partition.
-	Name string
+	Major  int64  // Major number of the device with this partition.
+	Minor  int64  // Minor number of the device with this partition.
+	Blocks int64  // Number of physical disk blocks contained.
+	Name   string // Name of the partition.
 }
 
+// Parse partitions from a file (normally /proc/partitions).
+// The file should contain lines in the format:
+//
+// major minor  #blocks  name
+//
+//	259        0 1953514584 nvme0n1
+//	259        4 1953513472 nvme0n1p1
 func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
 	// Parse each line from file.
 	partitions := []Partitions{}

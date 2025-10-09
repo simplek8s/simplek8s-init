@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openlyinc/pointy"
+	"go.openly.dev/pointy"
 )
 
 func TestShadow_GetNumberOfDaysFrom1970(t *testing.T) {

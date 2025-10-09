@@ -448,6 +448,7 @@ func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 		log.Error(err)
 		return err
 	}
+	// Caution. Users could creates or update groups.
 	if err := feedByBootstrapConfigUsers(sysroot, config); err != nil {
 		log.Error(err)
 		return err

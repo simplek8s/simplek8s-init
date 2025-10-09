@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 
 	"github.com/jlsalvador/simplek8s/pkg/cp"
-	"github.com/jlsalvador/simplek8s/pkg/linux"
+	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
 	"github.com/jlsalvador/simplek8s/pkg/simplek8s/bootstrap"
 	"github.com/jlsalvador/simplek8s/pkg/simplek8s/sysroot"
 	"github.com/jlsalvador/simplek8s/pkg/simplek8s/sysroot/feeder"
@@ -35,20 +35,20 @@ func mountNextRoot(where string) error {
 	log.Debug("start")
 	defer log.Debug("end")
 
-	nextRoot := linux.MountPoint{
+	nextRoot := mount.MountPoint{
 		Target: where,
 		Chmod:  0755,
 		Source: "tmpfs",
 		Fstype: "tmpfs",
-		Flags:  unix.MS_NOSUID | unix.MS_NODEV,
+		Flags:  mount.MountFlagNoSUID | mount.MountFlagNoDev,
 		Data:   "size=90%",
 	}
 
-	if err := linux.Mount(nextRoot); err != nil {
+	if err := mount.Mount(nextRoot); err != nil {
 		return err
 	}
 
-	// if err := linux.MountPseudoFS(where); err != nil {
+	// if err := mount.MountPseudoFS(where); err != nil {
 	// 	log.WithError(err).Error("can not mount pseudofs into " + where)
 	// 	return err
 	// }
@@ -58,7 +58,7 @@ func mountNextRoot(where string) error {
 
 func populateUsr(where string) error {
 	// Mount tmpfs as /usr.
-	usr := linux.MountPoint{
+	usr := mount.MountPoint{
 		Target: where,
 		Chmod:  0755,
 		Source: "tmpfs",
@@ -67,7 +67,7 @@ func populateUsr(where string) error {
 		Data:   "size=90%",
 	}
 
-	if err := linux.Mount(usr); err != nil {
+	if err := mount.Mount(usr); err != nil {
 		log.WithError(err).Error("can not mount tmpfs into " + where)
 	}
 
@@ -90,7 +90,7 @@ func populateUsr(where string) error {
 	}
 
 	// Remount /usr as RO.
-	if err := linux.Mount(linux.MountPoint{
+	if err := mount.Mount(mount.MountPoint{
 		Target: usr.Target,
 		Chmod:  usr.Chmod,
 		Source: "",
@@ -120,16 +120,21 @@ func createNextRoot(where string) error {
 		return err
 	}
 
-	if err := linux.CreateDeprecatedSymlinks(where); err != nil {
+	if err := sysroot.CreateLegacySymlinks(where); err != nil {
 		log.WithError(err).Error("can not create deprecated symlinks into " + where)
 		return err
 	}
 
 	sr := &sysroot.Sysroot{}
 
-	//TODO: Maybe remove FeedSysrootByFiles and only use the bootstrap config.
-	if err := feeder.FeedSysrootByFiles(sr, "/"); err != nil {
-		log.WithError(err).Error("can not feed by current initrd files")
+	// //TODO: Maybe remove FeedSysrootByFiles and only use the bootstrap config.
+	// if err := feeder.FeedSysrootByFiles(sr, "/"); err != nil {
+	// 	log.WithError(err).Error("can not feed by current initrd files")
+	// 	return err
+	// }
+
+	if err := feeder.FeedSysrootByDefault(sr); err != nil {
+		log.WithError(err).Error("can not feed sysroot by default")
 		return err
 	}
 
@@ -138,18 +143,17 @@ func createNextRoot(where string) error {
 	if err != nil {
 		log.WithError(err).Warn("can not fetch bootstrap config")
 	} else if config != nil {
+		// //DEBUG: Print out the config structure.
+		// fmt.Println("simplek8s.yaml:\n```yaml\n" + config.String() + "\n```")
+
 		if err := bootstrap.FeedSysrootByBootstrapConfig(sr, *config); err != nil {
-			log.WithError(err).Error("can not feed by bootstrap config")
+			log.WithError(err).Error("can not feed sysroot by bootstrap config")
 			return err
 		}
 	}
 
-	//DEBUG: Print out the sysroot structure.
-	// o, _ := json.MarshalIndent(sr, "", " ")
-	// fmt.Printf("sr: %s\n", o)
-
-	//DEBUG: Drop to shell.
-	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
+	// //DEBUG: Print out the sysroot structure.
+	// fmt.Println("sysroot:\n```json\n" + sr.String() + "\n```")
 
 	if err := sr.Write(where); err != nil {
 		log.WithError(err).Error("can not write sysroot config")
@@ -187,34 +191,6 @@ func switchRoot(where string) error {
 	return nil
 }
 
-type KmsgFormatter struct {
-	Ident string
-}
-
-func (f *KmsgFormatter) Format(entry *log.Entry) ([]byte, error) {
-	var level int
-	switch entry.Level {
-	case log.PanicLevel, log.FatalLevel:
-		level = 0
-	case log.ErrorLevel:
-		level = 3
-	case log.WarnLevel:
-		level = 4
-	case log.InfoLevel:
-		level = 6
-	default:
-		level = 7 // Debug/Trace
-	}
-
-	ft := log.TextFormatter{
-		DisableColors:    true,
-		DisableTimestamp: true,
-	}
-	msg, _ := ft.Format(entry)
-
-	return fmt.Appendf(nil, "<%d>%s[%d]: %s", level, f.Ident, os.Getpid(), msg), nil
-}
-
 // It:
 //   - Opens /dev/kmsg for kernel‑message logging.
 //   - Configures the logger.
@@ -222,21 +198,9 @@ func (f *KmsgFormatter) Format(entry *log.Entry) ([]byte, error) {
 //   - Prepares the next root filesystem and switches to it.
 //   - Exits cleanly.
 func main() {
-	// kernel-parameters for debug: ignore_loglevel ignore_rlimit_data
-	if err := linux.Mount(linux.Mountpoints.Dev); err != nil {
-		log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
-		log.SetOutput(os.Stdout)
-	} else {
-		kmsg, err := os.OpenFile("/dev/kmsg", os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.WithError(err).Warn("Falling back to stdout, /dev/kmsg not available")
-			log.SetOutput(os.Stdout)
-		} else {
-			defer kmsg.Close()
-			log.SetOutput(kmsg)
-		}
-	}
-	log.SetFormatter(&KmsgFormatter{Ident: "simplek8s-init"})
+	log.SetFormatter(&log.TextFormatter{
+		DisableTimestamp: true,
+	})
 	log.SetLevel(log.InfoLevel)
 
 	log.Debug("start")
@@ -253,7 +217,7 @@ func main() {
 		log.WithError(err).Fatal("can not populate next root " + where)
 	}
 
-	//DEBUG: Drop to shell.
+	// // DEBUG: Drop to shell.
 	// unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
 
 	if err := switchRoot(where); err != nil {

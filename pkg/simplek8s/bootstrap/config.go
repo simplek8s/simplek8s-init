@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -13,11 +12,11 @@ import (
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/jlsalvador/simplek8s/pkg/linux"
+	"github.com/goccy/go-yaml"
+	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
 	"github.com/jlsalvador/simplek8s/pkg/linux/sysfs"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -26,98 +25,65 @@ const (
 )
 
 type Groups struct {
-	Gid    *int   `yaml:"gid,omitempty"`
-	Name   string `yaml:"name"`
-	System *bool  `yaml:"system,omitempty"`
+	Gid    *int   `yaml:",omitempty"`
+	Name   string `yaml:""`
+	System *bool  `yaml:",omitempty"`
 }
 type Users struct {
-	Uid               *int     `yaml:"uid,omitempty"`
-	Gid               *int     `yaml:"gid,omitempty"`
-	Name              string   `yaml:"name,omitempty"`
-	PasswordHash      *string  `yaml:"passwordHash,omitempty"`
-	SshAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"`
-	Groups            []string `yaml:"groups,omitempty"`
-	System            *bool    `yaml:"system,omitempty"`
+	Uid                         *int     `yaml:",omitempty"`
+	Gid                         *int     `yaml:",omitempty"`
+	Name                        string   `yaml:""`
+	PasswordHash                *string  `yaml:"password_hash,omitempty"`
+	DeprecatedPasswordHash      *string  `yaml:"passwordHash,omitempty"`
+	SshAuthorizedKeys           []string `yaml:"ssh_authorized_keys,omitempty"`
+	DeprecatedSshAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"`
+	Groups                      []string `yaml:",omitempty"`
+	System                      *bool    `yaml:",omitempty"`
 }
 type Mounts struct {
-	What    string   `yaml:"what,omitempty"`
-	Where   string   `yaml:"where,omitempty"`
-	Type    *string  `yaml:"type,omitempty"`
-	Options *string  `yaml:"options,omitempty"`
-	After   []string `yaml:"after,omitempty"`
+	What    string   `yaml:""`
+	Where   string   `yaml:""`
+	Type    *string  `yaml:",omitempty"`
+	Options *string  `yaml:",omitempty"`
+	After   []string `yaml:",omitempty"`
 }
 type Links struct {
-	Overwrite *bool   `yaml:"overwrite,omitempty"`
-	Path      string  `yaml:"path,omitempty"`
-	Target    string  `yaml:"target,omitempty"`
-	Owner     *string `yaml:"owner,omitempty"`
-	Hard      *bool   `yaml:"hard,omitempty"`
+	Overwrite *bool   `yaml:",omitempty"`
+	Path      string  `yaml:""`
+	Target    string  `yaml:""`
+	Owner     *string `yaml:",omitempty"`
+	Hard      *bool   `yaml:",omitempty"`
 }
 type Directories struct {
-	Overwrite   *bool   `yaml:"overwrite,omitempty"`
-	Path        string  `yaml:"path,omitempty"`
-	Owner       *string `yaml:"owner,omitempty"`
-	Permissions *string `yaml:"permissions,omitempty"`
+	Overwrite   *bool   `yaml:",omitempty"`
+	Path        string  `yaml:""`
+	Owner       *string `yaml:",omitempty"`
+	Permissions *string `yaml:",omitempty"`
 }
 type Files struct {
-	Overwrite   *bool   `yaml:"overwrite,omitempty"`
-	Path        string  `yaml:"path,omitempty"`
-	Encoding    *string `yaml:"encoding,omitempty"`
-	Content     *string `yaml:"content,omitempty"`
-	Owner       *string `yaml:"owner,omitempty"`
-	Permissions *string `yaml:"permissions,omitempty"`
+	Overwrite   *bool   `yaml:",omitempty"`
+	Path        string  `yaml:""`
+	Encoding    *string `yaml:",omitempty"`
+	Content     *string `yaml:",omitempty"`
+	Owner       *string `yaml:",omitempty"`
+	Permissions *string `yaml:",omitempty"`
 }
 type Storage struct {
-	Mounts      []Mounts      `yaml:"mounts,omitempty"`
-	Links       []Links       `yaml:"links,omitempty"`
-	Directories []Directories `yaml:"directories,omitempty"`
-	Files       []Files       `yaml:"files,omitempty"`
+	Mounts      []Mounts      `yaml:",omitempty"`
+	Links       []Links       `yaml:",omitempty"`
+	Directories []Directories `yaml:",omitempty"`
+	Files       []Files       `yaml:",omitempty"`
 }
 type Config struct {
-	Version string   `yaml:"version"`
-	Groups  []Groups `yaml:"groups,omitempty"`
-	Users   []Users  `yaml:"users,omitempty"`
-	Storage *Storage `yaml:"storage,omitempty"`
+	Version string   `yaml:""`
+	Groups  []Groups `yaml:",omitempty"`
+	Users   []Users  `yaml:",omitempty"`
+	Storage *Storage `yaml:",omitempty"`
 }
 
 func (c *Config) String() string {
-	j, _ := json.Marshal(c)
+	j, _ := yaml.MarshalWithOptions(c, yaml.Indent(2))
 	return string(j)
-}
-
-// waitForAnyFile waits for any of the provided paths to exist, with a timeout.
-func waitForAnyFile(paths []string, timeout time.Duration) error {
-	log.Debug("start")
-	defer log.Debug("end")
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	found := make(chan string, 1)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				for _, path := range paths {
-					if _, err := os.Stat(path); err == nil {
-						found <- path
-						return
-					}
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}()
-	select {
-	case path := <-found:
-		log.Debugf("path %s detected.", path)
-	case <-ctx.Done():
-		return errors.New("timeout waiting for paths")
-	}
-
-	return nil
 }
 
 // Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
@@ -146,8 +112,8 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 
 	if len(blockDevices) > 0 {
 		if _, err := os.Stat(blockDevices[0]); errors.Is(err, os.ErrNotExist) {
-			linux.Mount(linux.Mountpoints.Dev)
-			defer unix.Unmount(linux.Mountpoints.Dev.Target, 0)
+			mount.Mount(mount.Mountpoints.Dev)
+			defer unix.Unmount(mount.Mountpoints.Dev.Target, 0)
 		}
 	}
 
@@ -246,26 +212,29 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 }
 
 func unmarshal(yamlContent []byte) (*Config, error) {
-	simpleK8s := new(Config)
-	if err := yaml.Unmarshal(yamlContent, &simpleK8s); err != nil {
+	config := &Config{
+		Version: CONFIG_VERSION_1,
+	}
+
+	if err := yaml.Unmarshal(yamlContent, config); err != nil {
 		log.WithFields(log.Fields{
 			"content": string(yamlContent),
 		}).Warn(err)
 		return nil, err
 	}
-	return simpleK8s, nil
-}
 
-// TODO: Add AWS user-data from API support.
-// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
-// http://169.254.169.254/latest/user-data
-func getConfigContentFromUserData(_ context.Context) ([]byte, error) {
-	log.Debug("start")
-	defer log.Debug("end")
+	for i := range config.Users {
+		if config.Users[i].PasswordHash == nil && config.Users[i].DeprecatedPasswordHash != nil {
+			config.Users[i].PasswordHash = config.Users[i].DeprecatedPasswordHash
+			config.Users[i].DeprecatedPasswordHash = nil
+		}
+		if config.Users[i].SshAuthorizedKeys == nil && config.Users[i].DeprecatedSshAuthorizedKeys != nil {
+			config.Users[i].SshAuthorizedKeys = config.Users[i].DeprecatedSshAuthorizedKeys
+			config.Users[i].DeprecatedSshAuthorizedKeys = nil
+		}
+	}
 
-	userDataPath := "/var/lib/cloud/user-data"
-	userDataContent, err := os.ReadFile(userDataPath)
-	return userDataContent, err
+	return config, nil
 }
 
 // This function will stay finding for block devices until `ctx`
@@ -337,6 +306,10 @@ func GetConfig() (*Config, error) {
 		return nil, nil
 
 	default:
+		// TODO: Fetch from AWS user-data:
+		// 		 https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+		// 		 http://169.254.169.254/latest/user-data
+
 		if data, err := getFromBlockDevices(ctx); err != nil {
 			log.Error(err)
 			return nil, err

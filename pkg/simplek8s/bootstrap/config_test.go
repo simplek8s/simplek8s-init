@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,8 +11,78 @@ import (
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/partition/gpt"
-	"github.com/openlyinc/pointy"
+	"github.com/goccy/go-yaml"
+	"go.openly.dev/pointy"
 )
+
+func Test_simple_marshal(t *testing.T) {
+	want := []byte(`version: "1"
+users:
+- name: user1
+  password_hash: password1
+  ssh_authorized_keys:
+  - something
+`)
+	c := Config{
+		Version: "1",
+		Users: []Users{
+			{
+				Name:         "user1",
+				PasswordHash: pointy.String("password1"),
+				SshAuthorizedKeys: []string{
+					"something",
+				},
+			},
+		},
+	}
+	got, err := yaml.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("got: %s, want: %s", got, want)
+	}
+}
+
+func Test_simple_unmarshal(t *testing.T) {
+	want := &Config{
+		Version: "1",
+		Users: []Users{
+			{
+				Name:         "user1",
+				PasswordHash: pointy.String("password1"),
+				SshAuthorizedKeys: []string{
+					"something",
+				},
+			},
+			{
+				Name:         "user2",
+				PasswordHash: pointy.String("password2"),
+				SshAuthorizedKeys: []string{
+					"something_more",
+				},
+			},
+		},
+	}
+	yml := `version: "1"
+users:
+- name: user1
+  password_hash: password1
+  ssh_authorized_keys:
+  - something
+- name: user2
+  passwordHash: password2
+  sshAuthorizedKeys:
+  - something_more
+`
+	got, err := unmarshal([]byte(yml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got: %v, want: %v", got, want)
+	}
+}
 
 func Test_unmarshal(t *testing.T) {
 	type args struct {
@@ -45,7 +116,7 @@ storage:
 				Storage: &Storage{
 					Files: []Files{
 						{
-							Path: "/etc/systemd/networkd/50-en-static.network",
+							Path: "/etc/systemd/network/50-en-static.network",
 							Content: pointy.String(`[Match]
 Name=en*
 
@@ -65,11 +136,11 @@ DNS=8.8.8.8
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := unmarshal(tt.args.yamlContent)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("unmarshal() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("error: %v, wantErr: %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("unmarshal() = %v, want %v", got, tt.want)
+				t.Errorf("got: %v, want: %v", got, tt.want)
 			}
 		})
 	}
@@ -81,7 +152,7 @@ func Test_getYamlContent(t *testing.T) {
 	tmpdir := t.TempDir()
 	diskFilename := filepath.Join(tmpdir, "disk.img")
 	diskSize := int64(1024 * 1024 * 100)
-	diskImage, err := diskfs.Create(diskFilename, diskSize, diskfs.Raw, diskfs.SectorSizeDefault)
+	diskImage, err := diskfs.Create(diskFilename, diskSize, diskfs.SectorSizeDefault)
 	if err != nil {
 		t.Fatal(err)
 	}

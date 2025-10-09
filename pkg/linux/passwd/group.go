@@ -10,9 +10,8 @@ import (
 )
 
 type Group struct {
-	Name string
-	// Could be ``, `*`, `!`, or `x`
-	Password string
+	Name     string
+	Password string // Could be ``, `*`, `!`, `x`, or hash.
 	Gid      int
 	UserList []string
 }

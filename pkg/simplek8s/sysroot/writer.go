@@ -8,7 +8,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/jlsalvador/simplek8s/pkg/common"
-	"github.com/jlsalvador/simplek8s/pkg/linux"
+	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
 	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
 	log "github.com/sirupsen/logrus"
 )
@@ -49,9 +49,9 @@ func writeMounts(mounts []Mount, where string) error {
 
 	// These units must be saved into /run/systemd/system/.
 	// So we need to mount `${where}/run` before.
-	runMnt := linux.Mountpoints.Run
+	runMnt := mount.Mountpoints.Run
 	runMnt.Target = filepath.Join(where, runMnt.Target)
-	if err := linux.Mount(runMnt); err != nil {
+	if err := mount.Mount(runMnt); err != nil {
 		log.WithError(err).Error("can not mount " + runMnt.Target)
 		return err
 	}
@@ -63,8 +63,7 @@ func writeMounts(mounts []Mount, where string) error {
 
 		if m.Where == "/var" {
 			dst = filepath.Join(where, "/run/systemd/system/var.mount.d/drop-in.conf")
-			content = fmt.Sprintf(`
-[Mount]
+			content = fmt.Sprintf(`[Mount]
 What=%s
 Where=%s
 Type=%s
@@ -74,8 +73,7 @@ Options=%s
 			escapedName := unit.UnitNameEscape(m.Where)
 			unitName := fmt.Sprintf("%s.mount", escapedName)
 			dst = filepath.Join(where, "/run/systemd/system/", unitName)
-			content = fmt.Sprintf(`
-[Unit]
+			content = fmt.Sprintf(`[Unit]
 Description=%s mountpoint
 DefaultDependencies=no
 Conflicts=umount.target
@@ -249,6 +247,7 @@ func writeFiles(files []File, where string) error {
 //   - Shadows
 //   - Groups
 //   - Users
+//   - sshAuthorizedKeys of each User if apply
 func (sr *Sysroot) Write(where string) error {
 	log.WithFields(log.Fields{
 		"where": where,
@@ -287,6 +286,8 @@ func (sr *Sysroot) Write(where string) error {
 		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/passwd"))
 		return err
 	}
+
+	//TODO: Write sshAuthorizedKeys of each User
 
 	return nil
 }
