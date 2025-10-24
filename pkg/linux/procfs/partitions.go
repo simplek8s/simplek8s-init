@@ -46,7 +46,7 @@ func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
 		// Parse each fields.
 		fields := strings.Fields(line)
 		if len(fields) != 4 {
-			return nil, fmt.Errorf("can not parse line %q, from %q", line, file.Name())
+			return nil, fmt.Errorf("cannot parse line %q, from %q", line, file.Name())
 		}
 		major, err := strconv.ParseInt(fields[0], 10, 64)
 		if err != nil {

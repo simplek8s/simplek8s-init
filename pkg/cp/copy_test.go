@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"syscall"
 	"testing"
 
-	"github.com/jlsalvador/simplek8s/pkg/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -152,7 +152,7 @@ func TestCopyDir(t *testing.T) {
 		dst := t.TempDir()
 		t.Logf("dst: %v", dst)
 
-		uid, gid := common.GetOwnUidGid()
+		uid, gid := syscall.Getuid(), syscall.Getgid()
 
 		if err := CopyDir(src.dirname, dst, &CopyOptions{
 			Exclude: []*regexp.Regexp{
@@ -204,7 +204,7 @@ func TestCopyDir(t *testing.T) {
 			},
 		}
 
-		uid, gid := common.GetOwnUidGid()
+		uid, gid := syscall.Getuid(), syscall.Getgid()
 
 		if err := CopyDir("test_assets", dst, &CopyOptions{
 			Fsys:     test_assets,

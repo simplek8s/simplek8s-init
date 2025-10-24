@@ -1,4 +1,16 @@
 // Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package passwd
 
@@ -9,7 +21,7 @@ import (
 
 func TestNewGroup(t *testing.T) {
 	t.Run("should initialize empty UserList when nil", func(t *testing.T) {
-		g := NewGroup(Group{Name: "test", Gid: 100})
+		g := NewGroup(Group{Name: "test", GID: 100})
 		if g.UserList == nil {
 			t.Fatal("expected UserList to be initialized to empty slice, got nil")
 		}
@@ -20,7 +32,7 @@ func TestNewGroup(t *testing.T) {
 
 	t.Run("should preserve existing UserList", func(t *testing.T) {
 		users := []string{"alice", "bob"}
-		g := NewGroup(Group{Name: "grp", Gid: 200, UserList: users})
+		g := NewGroup(Group{Name: "grp", GID: 200, UserList: users})
 		if !reflect.DeepEqual(g.UserList, users) {
 			t.Fatalf("expected %v, got %v", users, g.UserList)
 		}
@@ -39,7 +51,7 @@ func TestMarshal(t *testing.T) {
 			group: Group{
 				Name:     "wheel",
 				Password: "x",
-				Gid:      0,
+				GID:      0,
 				UserList: []string{"root", "admin"},
 			},
 			want: "wheel:x:0:root,admin",
@@ -48,14 +60,14 @@ func TestMarshal(t *testing.T) {
 			name: "empty password replaced with x",
 			group: Group{
 				Name:     "users",
-				Gid:      100,
+				GID:      100,
 				UserList: []string{},
 			},
 			want: "users:x:100:",
 		},
 		{
 			name:      "missing name returns error",
-			group:     Group{Password: "x", Gid: 100},
+			group:     Group{Password: "x", GID: 100},
 			expectErr: true,
 		},
 	}
@@ -92,7 +104,7 @@ func TestUnmarshalGroup(t *testing.T) {
 			want: Group{
 				Name:     "wheel",
 				Password: "x",
-				Gid:      0,
+				GID:      0,
 				UserList: []string{"root", "admin"},
 			},
 		},
@@ -102,7 +114,7 @@ func TestUnmarshalGroup(t *testing.T) {
 			want: Group{
 				Name:     "users",
 				Password: "x",
-				Gid:      100,
+				GID:      100,
 				UserList: []string{""},
 			},
 		},
@@ -117,7 +129,7 @@ func TestUnmarshalGroup(t *testing.T) {
 			want: Group{
 				Name:     "extra",
 				Password: "x",
-				Gid:      200,
+				GID:      200,
 				UserList: []string{"foo", "bar", "unused"},
 			},
 		},

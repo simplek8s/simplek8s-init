@@ -1,3 +1,17 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package bootstrap
 
 import (
@@ -5,48 +19,67 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
-	"github.com/jlsalvador/simplek8s/pkg/common"
-	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
-	sr "github.com/jlsalvador/simplek8s/pkg/simplek8s/sysroot"
+	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/passwd"
+	sr "simplek8s/pkg/simplek8s/sysroot"
+
 	log "github.com/sirupsen/logrus"
+	"go.openly.dev/pointy"
 )
 
-func getNextGid(groups []passwd.Group, isSystem bool) int {
+func getNextGID(groups []passwd.Group, isSystem bool) int {
 	log.WithFields(log.Fields{
 		"groups":   groups,
 		"isSystem": isSystem,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
-	current := 0
+	current := 999
 	if !isSystem {
 		current = 1000
 	}
 
 	ids := []int{}
 	for _, group := range groups {
-		if (isSystem && group.Gid >= 1000) || (!isSystem && group.Gid < 1000) {
+		if (isSystem && group.GID >= 1000) || (!isSystem && group.GID < 1000) {
 			continue
 		}
 
-		ids = append(ids, int(group.Gid))
+		ids = append(ids, int(group.GID))
 	}
 
 	for slices.Contains(ids, current) {
-		current++
+		if isSystem {
+			// When it is a system group, goes backward from 999 to 1.
+			current--
+			if current == 0 {
+				// If system groups are exausted, always returns 999.
+				return 999
+			}
+		} else {
+			// When it is a normal group, goes forward from 1000 to 65533.
+			current++
+			if current == 65534 {
+				// Skip 65534 and 65535:
+				// doc: https://systemd.io/UIDS-GIDS/#special-distribution-uid-ranges
+				current = 65536
+			}
+		}
 	}
 	return current
 }
 
-func getNextUid(users []passwd.User, isSystem bool) int {
+func getNextUID(users []passwd.User, isSystem bool) int {
 	log.WithFields(log.Fields{
 		"users":    users,
 		"isSystem": isSystem,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	current := 0
 	if !isSystem {
@@ -55,11 +88,11 @@ func getNextUid(users []passwd.User, isSystem bool) int {
 
 	ids := []int{}
 	for _, user := range users {
-		if (isSystem && user.Uid >= 1000) || (!isSystem && user.Uid < 1000) {
+		if (isSystem && user.UID >= 1000) || (!isSystem && user.UID < 1000) {
 			continue
 		}
 
-		ids = append(ids, int(user.Uid))
+		ids = append(ids, int(user.UID))
 	}
 
 	for slices.Contains(ids, current) {
@@ -68,41 +101,41 @@ func getNextUid(users []passwd.User, isSystem bool) int {
 	return current
 }
 
-func getUidByName(users []passwd.User, name string) *int {
-	log.Debug("start")
-	defer log.Debug("end")
+func getUIDByName(users []passwd.User, name string) *int {
+	log.Trace("start")
+	defer log.Trace("end")
 
 	for _, user := range users {
 		if user.Name == name {
-			return &user.Uid
+			return &user.UID
 		}
 	}
 	log.WithFields(log.Fields{
 		"name":  name,
 		"users": users,
-	}).Error("can not find uid by name")
+	}).Error("cannot find uid by name")
 	return nil
 }
 
-func getGidByName(groups []passwd.Group, name string) *int {
-	log.Debug("start")
-	defer log.Debug("end")
+func getGIDByName(groups []passwd.Group, name string) *int {
+	log.Trace("start")
+	defer log.Trace("end")
 
 	for _, group := range groups {
 		if group.Name == name {
-			return &group.Gid
+			return &group.GID
 		}
 	}
 	log.WithFields(log.Fields{
 		"name":   name,
 		"groups": groups,
-	}).Error("can not find gid by name")
+	}).Error("cannot find gid by name")
 	return nil
 }
 
-func getUidGidFromString(permission string, groups []passwd.Group, users []passwd.User) (int, int) {
-	log.Debug("start")
-	defer log.Debug("end")
+func getUIDGIDFromString(permission string, groups []passwd.Group, users []passwd.User) (int, int) {
+	log.Trace("start")
+	defer log.Trace("end")
 
 	uid := 0
 	gid := 0
@@ -111,7 +144,7 @@ func getUidGidFromString(permission string, groups []passwd.Group, users []passw
 	if value, err := strconv.Atoi(ids[0]); err == nil {
 		uid = value
 	} else {
-		if value := getUidByName(users, ids[0]); value != nil {
+		if value := getUIDByName(users, ids[0]); value != nil {
 			uid = *value
 		}
 	}
@@ -119,7 +152,7 @@ func getUidGidFromString(permission string, groups []passwd.Group, users []passw
 		if value, err := strconv.Atoi(ids[1]); err == nil {
 			gid = value
 		} else {
-			if value := getGidByName(groups, ids[1]); value != nil {
+			if value := getGIDByName(groups, ids[1]); value != nil {
 				gid = *value
 			}
 		}
@@ -129,39 +162,122 @@ func getUidGidFromString(permission string, groups []passwd.Group, users []passw
 }
 
 func updateOrAppendFile(files []sr.File, file sr.File) []sr.File {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	return common.UpdateOrAppend(files, file, func(a, b sr.File) bool {
 		return a.Filename == b.Filename
 	})
 }
 
-func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
-	log.WithFields(log.Fields{
-		"sysroot": sysroot,
-		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
-
+// feedByBootstrapConfigGroupsWithGUIDs appends into sysroot.Groups user
+// defined groups with proper GIDs.
+//
+// Groups without GIDs or empty names will be skipped.
+func feedByBootstrapConfigGroupsWithGUIDs(sysroot *sr.Sysroot, config Config) {
+	// First, create user defined groups with proper GIDs.
 	for _, group := range config.Groups {
-		isSystem := common.GetOrDefault(group.System, false)
-
-		var gid int
-		if group.Gid != nil {
-			gid = *group.Gid
-		} else {
-			gid = getNextGid(sysroot.Groups, isSystem)
+		// Skip empty group names.
+		if group.Name == "" {
+			continue
 		}
 
-		group := passwd.Group{
+		// Skip groups without GIDs.
+		if group.GID == nil {
+			continue
+		}
+
+		group := passwd.NewGroup(passwd.Group{
 			Name: group.Name,
-			Gid:  gid,
-		}
+			GID:  *group.GID,
+		})
 		sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, group, func(a, b passwd.Group) bool {
 			return a.Name == b.Name
 		})
 	}
+}
+
+// feedByBootstrapConfigGroupsFromUsers appends user groups that are not
+// already defined.
+//
+// Example: create the "root" group for the "root" user.
+func feedByBootstrapConfigGroupsFromUsers(config Config, sysroot *sr.Sysroot) {
+	for _, user := range config.Users {
+		// Skip empty usernames.
+		if user.Name == "" {
+			continue
+		}
+
+		// Skip user if there is already a (user defined) group with the same user.GID.
+		if user.GID != nil && slices.IndexFunc(sysroot.Groups, func(group passwd.Group) bool {
+			return group.GID == *user.GID
+		}) >= 0 {
+			continue
+		}
+
+		isSystem := common.Get(user.System, false)
+		gid := common.Get(user.GID, getNextGID(sysroot.Groups, isSystem))
+
+		// Find GID that does not collides with the already defined groups.
+		if slices.IndexFunc(sysroot.Groups, func(g passwd.Group) bool {
+			return g.GID == gid
+		}) >= 0 {
+			gid = getNextGID(sysroot.Groups, isSystem)
+		}
+
+		sysroot.Groups = append(sysroot.Groups, passwd.NewGroup(passwd.Group{
+			Name: user.Name,
+			GID:  gid,
+			UserList: []string{
+				user.Name,
+			},
+		}))
+	}
+}
+
+// feedByBootstrapConfigGroupsWithoutGIDs appends into sysroot.Groups user
+// defined groups without GIDs.
+//
+// Groups with empty names will be skipped.
+func feedByBootstrapConfigGroupsWithoutGIDs(config Config, sysroot *sr.Sysroot) {
+	for _, group := range config.Groups {
+		// Skip empty group names.
+		if group.Name == "" {
+			continue
+		}
+
+		// Skip groups with proper GIDs.
+		if group.GID != nil {
+			continue
+		}
+
+		isSystem := common.Get(group.System, false)
+		gid := getNextGID(sysroot.Groups, isSystem)
+		group := passwd.NewGroup(passwd.Group{
+			Name: group.Name,
+			GID:  gid,
+		})
+		sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, group, func(a, b passwd.Group) bool {
+			return a.Name == b.Name
+		})
+	}
+}
+
+func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
+	log.WithFields(log.Fields{
+		"sysroot": sysroot,
+		"config":  config,
+	}).Trace("start")
+	defer log.Trace("end")
+
+	feedByBootstrapConfigGroupsWithGUIDs(sysroot, config)
+	feedByBootstrapConfigGroupsFromUsers(config, sysroot)
+	feedByBootstrapConfigGroupsWithoutGIDs(config, sysroot)
+
+	// Sort groups by its GIDs.
+	sort.Slice(sysroot.Groups, func(i, j int) bool {
+		return sysroot.Groups[i].GID < sysroot.Groups[j].GID
+	})
 
 	return nil
 }
@@ -174,43 +290,67 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	for _, user := range config.Users {
-		isSystem := common.GetOrDefault(user.System, false)
-
-		home := ""  // Default value from `NewUser()`
-		shell := "" // Default value from `NewUser()`
-		uid := 0
-		gid := 0
-		if user.Name == "root" {
-			home = "/root"
-			shell = "/usr/bin/sh"
-		} else {
-			if !isSystem {
-				home = fmt.Sprintf("/home/%s", user.Name)
-				shell = "/usr/bin/sh"
-			}
-
-			if user.Uid != nil {
-				uid = *user.Uid
-			} else {
-				uid = getNextUid(sysroot.Users, isSystem)
-			}
-
-			if user.Gid != nil {
-				uid = *user.Gid
-			} else {
-				gid = getNextGid(sysroot.Groups, isSystem)
-			}
+		// Skip empty usernames.
+		if user.Name == "" {
+			continue
 		}
 
+		home := ""  // Will set the default when `NewUser()`
+		shell := "" // Will set the default when `NewUser()`
+		isSystem := common.Get(user.System, false)
+
+		// Set the home and shell values depending of user.{Name,System}.
+		if user.Name == "root" {
+			// Just for the root user.
+			home = "/root"
+			shell = "/usr/bin/sh"
+			if user.UID == nil {
+				user.UID = pointy.Int(0)
+			}
+			if user.GID == nil {
+				user.GID = pointy.Int(0)
+			}
+		} else if !isSystem {
+			// Normal user.
+			home = fmt.Sprintf("/home/%s", user.Name)
+			shell = "/usr/bin/sh"
+		} else {
+			// System user.
+			home = "/"
+			shell = "/usr/sbin/nologin"
+		}
+
+		uid := common.Get(user.UID, getNextUID(sysroot.Users, isSystem))
+		gid := common.Get(user.GID, -1)
+
+		// user.GID is nil, try to find a group with the same user.Name.
+		if gid == -1 {
+			gid = common.Get(getGIDByName(sysroot.Groups, user.Name), -1)
+		}
+
+		// Create a new group if there are not groups with the same user.Name
+		// or user.GID.
+		if gid == -1 {
+			passwdGroup := passwd.NewGroup(passwd.Group{
+				Name:     user.Name,
+				Password: "",
+				GID:      getNextGID(sysroot.Groups, isSystem),
+				UserList: []string{user.Name},
+			})
+			sysroot.Groups = append(sysroot.Groups, passwdGroup)
+			gid = passwdGroup.GID
+		}
+
+		// Add or update user to sysroot.Users.
 		passwdUser := passwd.NewUser(passwd.User{
 			Name:     user.Name,
 			Password: "x",
-			Uid:      uid,
-			Gid:      gid,
+			UID:      uid,
+			GID:      gid,
 			Home:     home,
 			Shell:    shell,
 		})
@@ -218,7 +358,7 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			return a.Name == b.Name
 		})
 
-		// Update shadow instance
+		// Update shadow instance.
 		if user.PasswordHash != nil {
 			passwdShadow := passwd.NewShadow(passwd.Shadow{
 				Name:     user.Name,
@@ -229,49 +369,48 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			})
 		}
 
-		// Update groups instances
+		// Update groups instances.
 		for _, groupName := range user.Groups {
-			found := false
-			// Try to update an already defined group
-			for index := range sysroot.Groups {
-				if groupName == sysroot.Groups[index].Name {
-					found = true
-					sysroot.Groups[index].UserList = append(sysroot.Groups[index].UserList, passwdUser.Name)
-					break
-				}
-			}
-			// Or create a new group
-			if !found {
+			i := slices.IndexFunc(sysroot.Groups, func(group passwd.Group) bool {
+				return group.Name == groupName
+			})
+
+			if i >= 0 {
+				// Try to update an already defined group.
+				sysroot.Groups[i].UserList = append(sysroot.Groups[i].UserList, passwdUser.Name)
+			} else {
+				// Create a new group.
 				sysroot.Groups = append(sysroot.Groups, passwd.Group{
 					Name:     groupName,
 					Password: "",
-					Gid:      getNextGid(sysroot.Groups, isSystem),
+					GID:      getNextGID(sysroot.Groups, isSystem),
 					UserList: []string{passwdUser.Name},
 				})
 			}
 		}
 
-		// SSH Authorized keys
-		if len(user.SshAuthorizedKeys) > 0 {
-			content := ""
-			for _, sshPublicKey := range user.SshAuthorizedKeys {
-				content += fmt.Sprintln(sshPublicKey)
+		// Set the SSH Authorized keys.
+		if len(user.SSHAuthorizedKeys) > 0 {
+			content := []byte{}
+			for _, sshPublicKey := range user.SSHAuthorizedKeys {
+				content = fmt.Appendln(content, sshPublicKey)
 			}
+
 			if len(content) > 0 {
 				sysroot.Directories = append(sysroot.Directories, sr.Directory{
 					Overwrite: false,
 					Path:      home + "/.ssh",
-					Mode:      0700,
-					Uid:       uid,
-					Gid:       gid,
+					Mode:      0o700,
+					UID:       uid,
+					GID:       gid,
 				})
 				sysroot.Files = append(sysroot.Files, sr.File{
 					Overwrite: false,
 					Filename:  home + "/.ssh/authorized_keys",
-					Content:   []byte(content),
-					Mode:      0600,
-					Uid:       uid,
-					Gid:       gid,
+					Content:   content,
+					Mode:      0o600,
+					UID:       uid,
+					GID:       gid,
 				})
 			}
 		}
@@ -284,32 +423,30 @@ func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Links == nil {
 		return nil
 	}
 
-	// Set UID and GID from own process by default
-	defaultUid, defaultGid := common.GetOwnUidGid()
+	// By default, UID and GID from own process.
+	uid, gid := syscall.Getuid(), syscall.Getgid()
 
 	for _, link := range config.Storage.Links {
-		uid := defaultUid
-		gid := defaultGid
 		if link.Owner != nil {
-			uid, gid = getUidGidFromString(*link.Owner, sysroot.Groups, sysroot.Users)
+			uid, gid = getUIDGIDFromString(*link.Owner, sysroot.Groups, sysroot.Users)
 		}
 
-		isOverwrite := common.GetOrDefault(link.Overwrite, false)
-		isHard := common.GetOrDefault(link.Hard, false)
+		isOverwrite := common.Get(link.Overwrite, false)
+		isHard := common.Get(link.Hard, false)
 
 		sysroot.Links = common.UpdateOrAppend(sysroot.Links, sr.Link{
 			Overwrite: isOverwrite,
 			Path:      link.Path,
 			Target:    link.Target,
-			Uid:       uid,
-			Gid:       gid,
+			UID:       uid,
+			GID:       gid,
 			Hard:      isHard,
 		}, func(a, b sr.Link) bool {
 			return a.Path == b.Path
@@ -323,26 +460,24 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Directories == nil {
 		return nil
 	}
 
-	// Set UID and GID from own process by default
-	defaultUid, defaultGid := common.GetOwnUidGid()
+	// By default, UID and GID from own process.
+	uid, gid := syscall.Getuid(), syscall.Getgid()
 
 	for _, directory := range config.Storage.Directories {
-		isOverwrite := common.GetOrDefault(directory.Overwrite, false)
+		isOverwrite := common.Get(directory.Overwrite, false)
 
-		uid := defaultUid
-		gid := defaultGid
 		if directory.Owner != nil {
-			uid, gid = getUidGidFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
+			uid, gid = getUIDGIDFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
 		}
 
-		var mode fs.FileMode = 0775
+		var mode fs.FileMode = 0o775
 		if directory.Permissions != nil {
 			if valueAsInt, err := strconv.Atoi(*directory.Permissions); err != nil {
 				return err
@@ -355,8 +490,8 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 			Overwrite: isOverwrite,
 			Path:      directory.Path,
 			Mode:      mode,
-			Uid:       uid,
-			Gid:       gid,
+			UID:       uid,
+			GID:       gid,
 		}, func(a, b sr.Directory) bool {
 			return a.Path == b.Path
 		})
@@ -385,27 +520,25 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Files == nil {
 		return nil
 	}
 
-	// Set UID and GID from own process by default
-	defaultUid, defaultGid := common.GetOwnUidGid()
+	// By default, UID and GID from own process.
+	uid, gid := syscall.Getuid(), syscall.Getgid()
 
 	for _, file := range config.Storage.Files {
 		filename := file.Path
-		isOverwrite := common.GetOrDefault(file.Overwrite, false)
+		isOverwrite := common.Get(file.Overwrite, false)
 
-		uid := defaultUid
-		gid := defaultGid
 		if file.Permissions != nil {
-			uid, gid = getUidGidFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
+			uid, gid = getUIDGIDFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
 		}
 
-		var mode fs.FileMode = 0664
+		var mode fs.FileMode = 0o664
 		if file.Permissions != nil {
 			if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
 				log.Error(err)
@@ -422,8 +555,8 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 			Filename:  filename,
 			Content:   content,
 			Mode:      mode,
-			Uid:       uid,
-			Gid:       gid,
+			UID:       uid,
+			GID:       gid,
 		})
 	}
 
@@ -434,8 +567,8 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Mounts == nil {
 		return nil
@@ -445,11 +578,29 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 		sysroot.Mounts = append(sysroot.Mounts, sr.Mount{
 			What:    m.What,
 			Where:   m.Where,
-			Type:    common.GetOrDefault(m.Type, ""),
-			Options: common.GetOrDefault(m.Options, ""),
+			Type:    common.Get(m.Type, ""),
+			Options: common.Get(m.Options, ""),
 		})
 	}
 
+	return nil
+}
+
+func markAsFeededByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
+	log.WithFields(log.Fields{
+		"sysroot": sysroot,
+		"config":  config,
+	}).Trace("start")
+	defer log.Trace("end")
+
+	sysroot.Files = append(sysroot.Files, sr.File{
+		Overwrite: true,
+		Filename:  "/run/simplek8s/simplek8s.yaml",
+		Content:   []byte(config.String()),
+		Mode:      0o400,
+		UID:       0,
+		GID:       0,
+	})
 	return nil
 }
 
@@ -457,32 +608,22 @@ func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
-	if err := feedByBootstrapConfigGroups(sysroot, config); err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := feedByBootstrapConfigUsers(sysroot, config); err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := feedByBootstrapConfigLinks(sysroot, config); err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := feedByBootstrapConfigDirectories(sysroot, config); err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := feedByBootstrapConfigFiles(sysroot, config); err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := feedByBootstrapConfigMounts(sysroot, config); err != nil {
-		log.Error(err)
-		return err
+	for _, fn := range []func(sysroot *sr.Sysroot, config Config) error{
+		feedByBootstrapConfigGroups,
+		feedByBootstrapConfigUsers,
+		feedByBootstrapConfigLinks,
+		feedByBootstrapConfigDirectories,
+		feedByBootstrapConfigFiles,
+		feedByBootstrapConfigMounts,
+		markAsFeededByBootstrapConfig,
+	} {
+		if err := fn(sysroot, config); err != nil {
+			log.Error(err)
+			return err
+		}
 	}
 	return nil
 }

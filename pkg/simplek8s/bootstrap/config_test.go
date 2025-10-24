@@ -1,3 +1,17 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package bootstrap
 
 import (
@@ -25,11 +39,11 @@ users:
 `)
 	c := Config{
 		Version: "1",
-		Users: []Users{
+		Users: []User{
 			{
 				Name:         "user1",
 				PasswordHash: pointy.String("password1"),
-				SshAuthorizedKeys: []string{
+				SSHAuthorizedKeys: []string{
 					"something",
 				},
 			},
@@ -47,18 +61,18 @@ users:
 func Test_simple_unmarshal(t *testing.T) {
 	want := &Config{
 		Version: "1",
-		Users: []Users{
+		Users: []User{
 			{
 				Name:         "user1",
 				PasswordHash: pointy.String("password1"),
-				SshAuthorizedKeys: []string{
+				SSHAuthorizedKeys: []string{
 					"something",
 				},
 			},
 			{
 				Name:         "user2",
 				PasswordHash: pointy.String("password2"),
-				SshAuthorizedKeys: []string{
+				SSHAuthorizedKeys: []string{
 					"something_more",
 				},
 			},
@@ -112,9 +126,9 @@ storage:
 `),
 			},
 			want: &Config{
-				Version: CONFIG_VERSION_1,
+				Version: ConfigVersion1,
 				Storage: &Storage{
-					Files: []Files{
+					Files: []File{
 						{
 							Path: "/etc/systemd/network/50-en-static.network",
 							Content: pointy.String(`[Match]
@@ -147,7 +161,6 @@ DNS=8.8.8.8
 }
 
 func Test_getYamlContent(t *testing.T) {
-
 	// Disk
 	tmpdir := t.TempDir()
 	diskFilename := filepath.Join(tmpdir, "disk.img")

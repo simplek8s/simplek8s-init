@@ -1,4 +1,16 @@
 // Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package sysroot
 
@@ -12,14 +24,14 @@ import (
 func TestCreateLegacySymlinks_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create refered symlinks.
+	// Create referred symlinks.
 	targets := []string{
 		"usr/bin",
 		"usr/sbin",
 		"usr/lib",
 	}
 	for _, d := range targets {
-		if err := os.MkdirAll(filepath.Join(tmpDir, d), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(tmpDir, d), 0o755); err != nil {
 			t.Fatalf("cannot create directory %s: %v", d, err)
 		}
 	}
@@ -63,7 +75,7 @@ func TestCreateLegacySymlinks_SymlinkExistsError(t *testing.T) {
 	// Create a file at the location where the first symlink should be created.
 	// This forces os.Symlink to fail with EEXIST.
 	binPath := filepath.Join(tmpDir, "bin")
-	if err := os.WriteFile(binPath, []byte("dummy"), 0644); err != nil {
+	if err := os.WriteFile(binPath, []byte("dummy"), 0o644); err != nil {
 		t.Fatalf("cannot create file %s: %v", binPath, err)
 	}
 
@@ -74,7 +86,7 @@ func TestCreateLegacySymlinks_SymlinkExistsError(t *testing.T) {
 	}
 
 	// The error returned by the function is the formatted message.
-	expectedPrefix := "can not create symlink"
+	expectedPrefix := "cannot create symlink"
 	if !strings.HasPrefix(err.Error(), expectedPrefix) {
 		t.Fatalf("unexpected error message: %q, want prefix %q", err.Error(), expectedPrefix)
 	}

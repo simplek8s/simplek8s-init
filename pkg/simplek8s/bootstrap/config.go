@@ -1,66 +1,81 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package bootstrap get Config from a "simplek8s.yaml".
 package bootstrap
 
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"time"
 
+	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/mount"
+	"simplek8s/pkg/linux/sysfs"
+
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/goccy/go-yaml"
-	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
-	"github.com/jlsalvador/simplek8s/pkg/linux/sysfs"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 )
 
 const (
-	CONFIG_VERSION_1         = "1"
-	DEFAULT_BLOCKDEV_TIMEOUT = 1 * time.Second
+	ConfigVersion1         = "1"
+	DefaultBlockdevTimeout = 1 * time.Second
 )
 
-type Groups struct {
-	Gid    *int   `yaml:",omitempty"`
+type Group struct {
+	GID    *int   `yaml:",omitempty"`
 	Name   string `yaml:""`
 	System *bool  `yaml:",omitempty"`
 }
-type Users struct {
-	Uid                         *int     `yaml:",omitempty"`
-	Gid                         *int     `yaml:",omitempty"`
+type User struct {
+	UID                         *int     `yaml:",omitempty"`
+	GID                         *int     `yaml:",omitempty"`
 	Name                        string   `yaml:""`
 	PasswordHash                *string  `yaml:"password_hash,omitempty"`
-	DeprecatedPasswordHash      *string  `yaml:"passwordHash,omitempty"`
-	SshAuthorizedKeys           []string `yaml:"ssh_authorized_keys,omitempty"`
-	DeprecatedSshAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"`
+	DeprecatedPasswordHash      *string  `yaml:"passwordHash,omitempty"` // Deprecated: use PasswordHash
+	SSHAuthorizedKeys           []string `yaml:"ssh_authorized_keys,omitempty"`
+	DeprecatedSSHAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"` // Deprecated: use SSHAuthorizedKeys
 	Groups                      []string `yaml:",omitempty"`
 	System                      *bool    `yaml:",omitempty"`
 }
-type Mounts struct {
+type Mount struct {
 	What    string   `yaml:""`
 	Where   string   `yaml:""`
 	Type    *string  `yaml:",omitempty"`
 	Options *string  `yaml:",omitempty"`
 	After   []string `yaml:",omitempty"`
 }
-type Links struct {
+type Link struct {
 	Overwrite *bool   `yaml:",omitempty"`
 	Path      string  `yaml:""`
 	Target    string  `yaml:""`
 	Owner     *string `yaml:",omitempty"`
 	Hard      *bool   `yaml:",omitempty"`
 }
-type Directories struct {
+type Directory struct {
 	Overwrite   *bool   `yaml:",omitempty"`
 	Path        string  `yaml:""`
 	Owner       *string `yaml:",omitempty"`
 	Permissions *string `yaml:",omitempty"`
 }
-type Files struct {
+type File struct {
 	Overwrite   *bool   `yaml:",omitempty"`
 	Path        string  `yaml:""`
 	Encoding    *string `yaml:",omitempty"`
@@ -69,15 +84,15 @@ type Files struct {
 	Permissions *string `yaml:",omitempty"`
 }
 type Storage struct {
-	Mounts      []Mounts      `yaml:",omitempty"`
-	Links       []Links       `yaml:",omitempty"`
-	Directories []Directories `yaml:",omitempty"`
-	Files       []Files       `yaml:",omitempty"`
+	Mounts      []Mount     `yaml:",omitempty"`
+	Links       []Link      `yaml:",omitempty"`
+	Directories []Directory `yaml:",omitempty"`
+	Files       []File      `yaml:",omitempty"`
 }
 type Config struct {
 	Version string   `yaml:""`
-	Groups  []Groups `yaml:",omitempty"`
-	Users   []Users  `yaml:",omitempty"`
+	Groups  []Group  `yaml:",omitempty"`
+	Users   []User   `yaml:",omitempty"`
 	Storage *Storage `yaml:",omitempty"`
 }
 
@@ -90,10 +105,10 @@ func (c *Config) String() string {
 func getYamlContent(blockDevices []string) ([]byte, error) {
 	log.WithFields(log.Fields{
 		"blockDevices": blockDevices,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
-	var directories = []string{
+	directories := []string{
 		"/",
 		"/simplek8s/",
 		"/EFI/",
@@ -104,17 +119,19 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 		"/boot/EFI/simplek8s/",
 	}
 
-	rSimpleK8sYaml, err := regexp.Compile("^simplek8s.ya?ml$")
-	if err != nil {
-		log.WithField("getYamlContent", err).Warn()
-		return nil, err
+	rSimpleK8sYaml := regexp.MustCompile("^simplek8s.ya?ml$")
+
+	if len(blockDevices) == 0 {
+		return nil, nil
 	}
 
-	if len(blockDevices) > 0 {
-		if _, err := os.Stat(blockDevices[0]); errors.Is(err, os.ErrNotExist) {
-			mount.Mount(mount.Mountpoints.Dev)
-			defer unix.Unmount(mount.Mountpoints.Dev.Target, 0)
+	// diskfs requires "/dev" to open raw devices.
+	if !common.IsPathExists(blockDevices[0]) {
+		err := mount.Mount(mount.Mountpoints.Dev)
+		if err != nil {
+			return nil, err
 		}
+		defer mount.Unmount(mount.Mountpoints.Dev.Target, 0)
 	}
 
 	for _, blockDevice := range blockDevices {
@@ -213,7 +230,7 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 
 func unmarshal(yamlContent []byte) (*Config, error) {
 	config := &Config{
-		Version: CONFIG_VERSION_1,
+		Version: ConfigVersion1,
 	}
 
 	if err := yaml.Unmarshal(yamlContent, config); err != nil {
@@ -228,9 +245,9 @@ func unmarshal(yamlContent []byte) (*Config, error) {
 			config.Users[i].PasswordHash = config.Users[i].DeprecatedPasswordHash
 			config.Users[i].DeprecatedPasswordHash = nil
 		}
-		if config.Users[i].SshAuthorizedKeys == nil && config.Users[i].DeprecatedSshAuthorizedKeys != nil {
-			config.Users[i].SshAuthorizedKeys = config.Users[i].DeprecatedSshAuthorizedKeys
-			config.Users[i].DeprecatedSshAuthorizedKeys = nil
+		if config.Users[i].SSHAuthorizedKeys == nil && config.Users[i].DeprecatedSSHAuthorizedKeys != nil {
+			config.Users[i].SSHAuthorizedKeys = config.Users[i].DeprecatedSSHAuthorizedKeys
+			config.Users[i].DeprecatedSSHAuthorizedKeys = nil
 		}
 	}
 
@@ -240,8 +257,8 @@ func unmarshal(yamlContent []byte) (*Config, error) {
 // This function will stay finding for block devices until `ctx`
 // context is cancelled or `simplek8s.yaml` file is found and read.
 func getFromBlockDevices(ctx context.Context) ([]byte, error) {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	for {
 		select {
@@ -258,7 +275,7 @@ func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 				return nil, err
 			}
 
-			//TODO: Add support for cmdline blockdev=<device>.
+			// TODO: Add support for cmdline blockdev=<device>.
 			// if blockdev, err := procfs.GetCmdlineValue("blockdev", ""); err != nil {
 			// 	log.Error(err)
 			// 	return nil, err
@@ -290,13 +307,9 @@ func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 	}
 }
 
-// Retrieve SimpleK8s Config.
-func GetConfig() (*Config, error) {
-	log.Debug("start")
-	defer log.Debug("end")
-
-	//TODO: Config timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// GetConfig retrieves SimpleK8s Config.
+func GetConfig(timeout time.Duration) (*Config, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	select {
@@ -306,9 +319,10 @@ func GetConfig() (*Config, error) {
 		return nil, nil
 
 	default:
-		// TODO: Fetch from AWS user-data:
+		// TODO: Fetch from URLs (static and kernel args):
 		// 		 https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 		// 		 http://169.254.169.254/latest/user-data
+		//		 https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html
 
 		if data, err := getFromBlockDevices(ctx); err != nil {
 			log.Error(err)

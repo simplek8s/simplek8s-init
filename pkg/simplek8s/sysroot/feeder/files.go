@@ -5,15 +5,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jlsalvador/simplek8s/pkg/common"
-	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
-	sr "github.com/jlsalvador/simplek8s/pkg/simplek8s/sysroot"
+	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/passwd"
+	sr "simplek8s/pkg/simplek8s/sysroot"
+
 	log "github.com/sirupsen/logrus"
 )
 
 func parseEachLineFromFilename(filename string, eachLineFunc func(line string) error) error {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	file, err := os.Open(filename)
 	if err != nil {
@@ -33,8 +34,8 @@ func parseEachLineFromFilename(filename string, eachLineFunc func(line string) e
 }
 
 func parseFilenameShadow(sysroot *sr.Sysroot, filename string) error {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	return parseEachLineFromFilename(filename, func(line string) error {
 		shadow := passwd.Shadow{}
@@ -53,8 +54,8 @@ func parseFilenameShadow(sysroot *sr.Sysroot, filename string) error {
 }
 
 func parseFilenameGroup(sysroot *sr.Sysroot, filename string) error {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	return parseEachLineFromFilename(filename, func(line string) error {
 		group := passwd.Group{}
@@ -73,8 +74,8 @@ func parseFilenameGroup(sysroot *sr.Sysroot, filename string) error {
 }
 
 func parseFilenamePasswd(sysroot *sr.Sysroot, filename string) error {
-	log.Debug("start")
-	defer log.Debug("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	return parseEachLineFromFilename(filename, func(line string) error {
 		user := passwd.User{}
@@ -95,8 +96,8 @@ func parseFilenamePasswd(sysroot *sr.Sysroot, filename string) error {
 func FeedSysrootByFiles(sysroot *sr.Sysroot, where string) error {
 	log.WithFields(log.Fields{
 		"where": where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	var filename string
 

@@ -11,7 +11,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/jlsalvador/simplek8s/pkg/common"
+	"simplek8s/pkg/common"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,8 +52,8 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 		"fi":      fi,
 		"dst":     dst,
 		"opt":     opt,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	// Skip exist entries if overwrite is false
 	info, _ := os.Stat(dst)
@@ -72,7 +73,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 		if s, ok := fi.Sys().(*syscall.Stat_t); !ok {
 			log.WithFields(log.Fields{
 				"fullname": fullname,
-			}).Warn("can not stat file, we can not preserve: uid, gid, atime, mtime")
+			}).Warn("cannot stat file, we cannot preserve: uid, gid, atime, mtime")
 		} else {
 			stat = s
 		}
@@ -105,7 +106,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 		}
 
 		// Remove possible exists file
-		if common.CheckFileExists(dst) {
+		if common.IsPathExists(dst) {
 			if err := os.Remove(dst); err != nil {
 				log.WithFields(log.Fields{
 					"dst": dst,
@@ -114,7 +115,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 			}
 		}
 
-		log.WithField("src", src).WithField("opt.Fsys", opt.Fsys).Debug()
+		log.WithField("src", src).WithField("opt.Fsys", opt.Fsys).Trace()
 		fSrc, err := opt.Fsys.Open(src)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -194,7 +195,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 				"fullname": fullname,
 				"uid":      uid,
 				"gid":      gid,
-			}).Warn("can not set chown")
+			}).Warn("cannot set chown")
 		} else {
 			if err := os.Lchown(dst, uid, gid); err != nil {
 				log.WithFields(log.Fields{
@@ -289,8 +290,8 @@ func copyFile(src string, dst string, fi fs.FileInfo, path string, root string, 
 		"path": path,
 		"root": root,
 		"opt":  opt,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	cPath := strings.TrimLeft(path, root)
 	cPath = strings.TrimLeft(cPath, string(filepath.Separator))
@@ -318,8 +319,8 @@ func CopyDir(src string, dst string, options *CopyOptions) error {
 		"src":     src,
 		"dst":     dst,
 		"options": options,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	root, opt := getOptionsWithDefaults(options, src)
 

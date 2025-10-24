@@ -1,4 +1,16 @@
 // Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package passwd
 
@@ -142,110 +154,75 @@ func TestUnmarshalShadow(t *testing.T) {
 }
 
 func TestUnmarshalShadow_AtoiCoverage(t *testing.T) {
-	fields := []string{
-		"LastChanged", "Minimum", "Maximum", "Warn", "Inactive", "Expire", "Reserved",
+	type shadowField struct {
+		name string
+		get  func(*Shadow) *int
 	}
 
-	validValue := "123"
-	invalidValue := "abc"
+	fields := []shadowField{
+		{"LastChanged", func(s *Shadow) *int { return s.LastChanged }},
+		{"Minimum", func(s *Shadow) *int { return s.Minimum }},
+		{"Maximum", func(s *Shadow) *int { return s.Maximum }},
+		{"Warn", func(s *Shadow) *int { return s.Warn }},
+		{"Inactive", func(s *Shadow) *int { return s.Inactive }},
+		{"Expire", func(s *Shadow) *int { return s.Expire }},
+		{"Reserved", func(s *Shadow) *int { return s.Reserved }},
+	}
 
-	for i, field := range fields {
-		t.Run(fmt.Sprintf("%s_empty", field), func(t *testing.T) {
-			tokens := make([]string, 9)
-			tokens[0] = "user"
-			tokens[1] = "pass"
-			// el campo i+2 será vacío (ya lo está por default)
-			entry := strings.Join(tokens, ":")
-			var s Shadow
-			if err := UnmarshalShadow(entry, &s); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			// el campo correspondiente debe ser nil
-			switch field {
-			case "LastChanged":
-				if s.LastChanged != nil {
-					t.Fatalf("expected nil, got %v", *s.LastChanged)
-				}
-			case "Minimum":
-				if s.Minimum != nil {
-					t.Fatalf("expected nil, got %v", *s.Minimum)
-				}
-			case "Maximum":
-				if s.Maximum != nil {
-					t.Fatalf("expected nil, got %v", *s.Maximum)
-				}
-			case "Warn":
-				if s.Warn != nil {
-					t.Fatalf("expected nil, got %v", *s.Warn)
-				}
-			case "Inactive":
-				if s.Inactive != nil {
-					t.Fatalf("expected nil, got %v", *s.Inactive)
-				}
-			case "Expire":
-				if s.Expire != nil {
-					t.Fatalf("expected nil, got %v", *s.Expire)
-				}
-			case "Reserved":
-				if s.Reserved != nil {
-					t.Fatalf("expected nil, got %v", *s.Reserved)
-				}
-			}
-		})
+	assertNil := func(t *testing.T, v *int) {
+		t.Helper()
+		if v != nil {
+			t.Fatalf("expected nil, got %v", *v)
+		}
+	}
 
-		t.Run(fmt.Sprintf("%s_invalid", field), func(t *testing.T) {
-			tokens := make([]string, 9)
-			tokens[0] = "user"
-			tokens[1] = "pass"
-			tokens[i+2] = invalidValue
-			entry := strings.Join(tokens, ":")
-			var s Shadow
-			if err := UnmarshalShadow(entry, &s); err == nil {
-				t.Fatal("expected error, got nil")
-			}
-		})
+	assertEqual := func(t *testing.T, v *int, expected int) {
+		t.Helper()
+		if v == nil || *v != expected {
+			t.Fatalf("expected %d, got %v", expected, v)
+		}
+	}
 
-		t.Run(fmt.Sprintf("%s_valid", field), func(t *testing.T) {
-			tokens := make([]string, 9)
-			tokens[0] = "user"
-			tokens[1] = "pass"
-			tokens[i+2] = validValue
-			entry := strings.Join(tokens, ":")
-			var s Shadow
-			if err := UnmarshalShadow(entry, &s); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			expected := 123
-			switch field {
-			case "LastChanged":
-				if s.LastChanged == nil || *s.LastChanged != expected {
-					t.Fatalf("expected %d, got %v", expected, s.LastChanged)
-				}
-			case "Minimum":
-				if s.Minimum == nil || *s.Minimum != expected {
-					t.Fatalf("expected %d, got %v", expected, s.Minimum)
-				}
-			case "Maximum":
-				if s.Maximum == nil || *s.Maximum != expected {
-					t.Fatalf("expected %d, got %v", expected, s.Maximum)
-				}
-			case "Warn":
-				if s.Warn == nil || *s.Warn != expected {
-					t.Fatalf("expected %d, got %v", expected, s.Warn)
-				}
-			case "Inactive":
-				if s.Inactive == nil || *s.Inactive != expected {
-					t.Fatalf("expected %d, got %v", expected, s.Inactive)
-				}
-			case "Expire":
-				if s.Expire == nil || *s.Expire != expected {
-					t.Fatalf("expected %d, got %v", expected, s.Expire)
-				}
-			case "Reserved":
-				if s.Reserved == nil || *s.Reserved != expected {
-					t.Fatalf("expected %d, got %v", expected, s.Reserved)
-				}
-			}
-		})
+	runEmpty := func(t *testing.T, f shadowField) {
+		t.Helper()
+		tokens := make([]string, 9)
+		tokens[0], tokens[1] = "user", "pass"
+		entry := strings.Join(tokens, ":")
+		var s Shadow
+		if err := UnmarshalShadow(entry, &s); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertNil(t, f.get(&s))
+	}
+
+	runInvalid := func(t *testing.T, _ shadowField, idx int) {
+		t.Helper()
+		tokens := make([]string, 9)
+		tokens[0], tokens[1] = "user", "pass"
+		tokens[idx+2] = "abc"
+		entry := strings.Join(tokens, ":")
+		var s Shadow
+		if err := UnmarshalShadow(entry, &s); err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	}
+
+	runValid := func(t *testing.T, f shadowField, idx int) {
+		t.Helper()
+		tokens := make([]string, 9)
+		tokens[0], tokens[1] = "user", "pass"
+		tokens[idx+2] = "123"
+		entry := strings.Join(tokens, ":")
+		var s Shadow
+		if err := UnmarshalShadow(entry, &s); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertEqual(t, f.get(&s), 123)
+	}
+
+	for i, f := range fields {
+		t.Run(f.name+"_empty", func(t *testing.T) { runEmpty(t, f) })
+		t.Run(f.name+"_invalid", func(t *testing.T) { runInvalid(t, f, i) })
+		t.Run(f.name+"_valid", func(t *testing.T) { runValid(t, f, i) })
 	}
 }

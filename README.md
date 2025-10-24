@@ -2,7 +2,6 @@
 
 SimpleK8s-Init will configures and populates the initrd and sysroot boot stages.
 
-
 ## Configuration specifications
 
 The file `simplek8s.yaml` is a YAML document conforming to the following specification:
@@ -12,18 +11,18 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
 - `version` (string): Currently must be `1`
 - _`users`_ (list of objects):
   - `name` (string): User name.
-  - DEPRECATED: ~~_`passwordHash`_ (string): Default is "x".~~
-  - DEPRECATED: ~~_`sshAuthorizedKeys`_ (list of string): Default is none.~~
   - _`password_hash`_ (string): Default is "x".
+  - DEPRECATED: ~~_`passwordHash`_ (string): Default is "x".~~
   - _`ssh_authorized_keys`_ (list of string): Default is none.
+  - DEPRECATED: ~~_`sshAuthorizedKeys`_ (list of string): Default is none.~~
   - _`uid`_ (int): Default is next unused uid.
   - _`gid`_ (int): Default is the same value of uid.
   - _`groups`_ (list of string): Default is none.
-  - _`system`_ (bool): Default is false.
+  - _`system`_ (boolean): Default is false.
 - _`groups`_ (list of objects):
   - `name` (string): Group name.
   - _`gid`_ (int): Group Id. Default is next unused gid.
-  - _`system`_ (bool): Default is false.
+  - _`system`_ (boolean): Default is false.
 - _`storage`_ (object):
   - _`mounts`_ (list of objects):
     - `what` (string)
@@ -32,24 +31,24 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
     - _`options`_ (string): Default is "defaults".
     - _`after`_ (list of string):
   - _`links`_ (list of objects):
-    - _`overwrite`_ (bool): Default is false.
+    - _`overwrite`_ (boolean): Default is false.
     - `path` (string)
     - `target` (string)
     - _`owner`_ (string): Default is the current process uid:gid.
-    - _`hard`_ (bool): Default is false.
+    - _`hard`_ (boolean): Default is false.
   - _`directories`_ (list of objects):
-    - _`overwrite`_ (bool): Default is false.
+    - _`overwrite`_ (boolean): Default is false.
     - `path` (string)
     - _`owner`_ (string): Default is the current process uid:gid.
     - _`permissions`_ (string): Default is "0775".
   - _`files`_ (list of objects):
-    - _`overwrite`_ (bool): Default is false.
+    - _`overwrite`_ (boolean): Default is false.
     - `path` (string)
-    - _`encoding`_ (string): If it is "b64", the field `content` will be decoded as base64. Default is empty.
+    - _`encoding`_ (string): Default is empty.
+      If it is "b64" `content` will be decoded as Base64.
     - _`content`_ (string): Default is empty.
     - _`owner`_ (string): Default is the current running process uid:gid.
     - _`permissions`_ (string): Default is "0664".
-
 
 ### Minimal example
 
@@ -64,7 +63,6 @@ storage:
     - what: /dev/disk/by-label/var
       where: /var
 ```
-
 
 ### Full example below
 

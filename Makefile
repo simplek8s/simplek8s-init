@@ -1,3 +1,17 @@
+# Copyright 2022 José Luis Salvador Rufo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 .DEFAULT_GOAL := build
 
 URL = https://publisher.simplek8s.org/upload/simplek8s-init
@@ -154,7 +168,19 @@ test: test-cyclo test-misspell test-go ## Execute all tests.
 upx: ${BINARIES_UPX} ## Compress project binaries with UPX.
 
 .PHONY: publish
-publish: ${BINARIES_UPX} ## Publish project binaries.
+publish: ${BINARIES} ## Publish project binaries.
+	$(foreach FILE, ${BINARIES}, \
+		echo -n '{"filenames":["$(notdir ${FILE})","$(subst .${BUILD_VERSION}.,.latest.,$(notdir ${FILE}))"],"checksum":"'$(shell sha256sum "${FILE}" | cut -d" " -f1)'","tags":["$(subst ${SPACE},"${COMMA}",${TAGS})"]}' > "${FILE}.publish.json" ; \
+		gpg --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \
+		curl \
+			-F "json=@${FILE}.publish.json" \
+			-F "signature=@${FILE}.publish.json.signature" \
+			-F "release=@${FILE}" \
+			"${URL}" ; \
+	)
+
+.PHONY: publish_upx
+publish_upx: ${BINARIES}.upx ## Publish project UPX binaries.
 	$(foreach FILE, ${BINARIES}, \
 		echo -n '{"filenames":["$(notdir ${FILE})","$(subst .${BUILD_VERSION}.,.latest.,$(notdir ${FILE}))"],"checksum":"'$(shell sha256sum "${FILE}.upx" | cut -d" " -f1)'","tags":["$(subst ${SPACE},"${COMMA}",${TAGS})"]}' > "${FILE}.publish.json" ; \
 		gpg --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \

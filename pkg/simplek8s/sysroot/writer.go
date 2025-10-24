@@ -1,3 +1,18 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package sysroot populates a new root to boot.
 package sysroot
 
 import (
@@ -6,10 +21,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/mount"
+	"simplek8s/pkg/linux/passwd"
+
 	"github.com/coreos/go-systemd/v22/unit"
-	"github.com/jlsalvador/simplek8s/pkg/common"
-	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
-	"github.com/jlsalvador/simplek8s/pkg/linux/passwd"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -22,11 +38,11 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 		"mode":     mode,
 		"uid":      uid,
 		"gid":      gid,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	path := filepath.Dir(filename)
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filename, content, mode); err != nil {
@@ -38,22 +54,27 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 	return nil
 }
 
+// writeMounts requires "${where}/run" mounted in order to write systemd
+// transient units there.
 func writeMounts(mounts []Mount, where string) error {
 	log.WithFields(log.Fields{
 		"mounts": mounts,
 		"where":  where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	// We will use systemd units to mount these mountpoints.
 
 	// These units must be saved into /run/systemd/system/.
 	// So we need to mount `${where}/run` before.
-	runMnt := mount.Mountpoints.Run
-	runMnt.Target = filepath.Join(where, runMnt.Target)
-	if err := mount.Mount(runMnt); err != nil {
-		log.WithError(err).Error("can not mount " + runMnt.Target)
-		return err
+	dst := filepath.Join(where, mount.Mountpoints.Run.Target)
+	if !common.IsPathExists(dst) {
+		mRun := mount.Mountpoints.Run
+		mRun.Target = filepath.Join(dst)
+		if err := mount.Mount(mRun); err != nil {
+			log.WithError(err).Error("cannot mount " + mRun.Target)
+			return err
+		}
 	}
 
 	// Create systemd mount unit for each mountpoint into `${where}/run/systemd/system/`.
@@ -89,8 +110,8 @@ Options=%s
 `, escapedName, m.What, m.Where, m.Type, m.Options)
 		}
 
-		if err := ensureWriteFile(dst, []byte(content), 0644, 0, 0); err != nil {
-			log.WithError(err).Error("can not write mount unit " + dst)
+		if err := ensureWriteFile(dst, []byte(content), 0o644, 0, 0); err != nil {
+			log.WithError(err).Error("cannot write mount unit " + dst)
 			return err
 		}
 	}
@@ -102,8 +123,8 @@ func writeShadows(shadows []passwd.Shadow, where string) error {
 	log.WithFields(log.Fields{
 		"shadows": shadows,
 		"where":   where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if len(shadows) == 0 {
 		return nil
@@ -119,7 +140,7 @@ func writeShadows(shadows []passwd.Shadow, where string) error {
 	}
 
 	dst := filepath.Join(where, "/etc/shadow")
-	mode := fs.FileMode(0600)
+	mode := fs.FileMode(0o600)
 	return ensureWriteFile(dst, []byte(content), mode, 0, 0)
 }
 
@@ -127,8 +148,8 @@ func writeGroups(groups []passwd.Group, where string) error {
 	log.WithFields(log.Fields{
 		"groups": groups,
 		"where":  where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if len(groups) == 0 {
 		return nil
@@ -144,7 +165,7 @@ func writeGroups(groups []passwd.Group, where string) error {
 	}
 
 	dst := filepath.Join(where, "/etc/group")
-	mode := fs.FileMode(0644)
+	mode := fs.FileMode(0o644)
 	return ensureWriteFile(dst, []byte(content), mode, 0, 0)
 }
 
@@ -152,8 +173,8 @@ func writeUsers(users []passwd.User, where string) error {
 	log.WithFields(log.Fields{
 		"users": users,
 		"where": where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if len(users) == 0 {
 		return nil
@@ -169,7 +190,7 @@ func writeUsers(users []passwd.User, where string) error {
 	}
 
 	dst := filepath.Join(where, "/etc/passwd")
-	mode := fs.FileMode(0644)
+	mode := fs.FileMode(0o644)
 	return ensureWriteFile(dst, []byte(content), mode, 0, 0)
 }
 
@@ -177,8 +198,8 @@ func writeLinks(links []Link, where string) error {
 	log.WithFields(log.Fields{
 		"links": links,
 		"where": where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	for _, l := range links {
 		dst := filepath.Join(where, l.Path)
@@ -186,8 +207,8 @@ func writeLinks(links []Link, where string) error {
 			dst,
 			l.Target,
 			l.Overwrite,
-			l.Uid,
-			l.Gid,
+			l.UID,
+			l.GID,
 			l.Hard,
 		); err != nil {
 			return err
@@ -201,15 +222,15 @@ func writeDirectories(directories []Directory, where string) error {
 	log.WithFields(log.Fields{
 		"directories": directories,
 		"where":       where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	for _, d := range directories {
 		dst := filepath.Join(where, d.Path)
 		if err := os.MkdirAll(dst, d.Mode); err != nil {
 			return err
 		}
-		if err := os.Chown(dst, d.Uid, d.Uid); err != nil {
+		if err := os.Chown(dst, d.UID, d.UID); err != nil {
 			return err
 		}
 	}
@@ -221,18 +242,18 @@ func writeFiles(files []File, where string) error {
 	log.WithFields(log.Fields{
 		"files": files,
 		"where": where,
-	}).Debug("start")
-	defer log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	for _, f := range files {
 		dst := filepath.Join(where, f.Filename)
 
 		// If overwrite == false and file exists, skip it.
-		if !f.Overwrite && common.CheckFileExists(dst) {
+		if !f.Overwrite && common.IsPathExists(dst) {
 			return nil
 		}
 
-		if err := ensureWriteFile(dst, f.Content, f.Mode, f.Uid, f.Gid); err != nil {
+		if err := ensureWriteFile(dst, f.Content, f.Mode, f.UID, f.GID); err != nil {
 			return err
 		}
 	}
@@ -240,7 +261,7 @@ func writeFiles(files []File, where string) error {
 	return nil
 }
 
-// Writes into the directory `where`:
+// Write writes into the directory `where`:
 //   - Links
 //   - Directories
 //   - Files
@@ -250,39 +271,39 @@ func writeFiles(files []File, where string) error {
 func (sr *Sysroot) Write(where string) error {
 	log.WithFields(log.Fields{
 		"where": where,
-	}).Debug("start")
-	log.Debug("end")
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if !common.IsDir(where) {
 		return fmt.Errorf("%q is not a directory", where)
 	}
 
 	if err := writeMounts(sr.Mounts, where); err != nil {
-		log.WithError(err).Error("can not write mounts")
+		log.WithError(err).Error("cannot write mounts")
 		return err
 	}
 	if err := writeLinks(sr.Links, where); err != nil {
-		log.WithError(err).Error("can not write links")
+		log.WithError(err).Error("cannot write links")
 		return err
 	}
 	if err := writeDirectories(sr.Directories, where); err != nil {
-		log.WithError(err).Error("can not write directories")
+		log.WithError(err).Error("cannot write directories")
 		return err
 	}
 	if err := writeFiles(sr.Files, where); err != nil {
-		log.WithError(err).Error("can not write files")
+		log.WithError(err).Error("cannot write files")
 		return err
 	}
 	if err := writeShadows(sr.Shadows, where); err != nil {
-		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/shadow"))
+		log.WithError(err).Error("cannot write " + filepath.Join(where, "/etc/shadow"))
 		return err
 	}
 	if err := writeGroups(sr.Groups, where); err != nil {
-		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/groups"))
+		log.WithError(err).Error("cannot write " + filepath.Join(where, "/etc/groups"))
 		return err
 	}
 	if err := writeUsers(sr.Users, where); err != nil {
-		log.WithError(err).Error("can not write " + filepath.Join(where, "/etc/passwd"))
+		log.WithError(err).Error("cannot write " + filepath.Join(where, "/etc/passwd"))
 		return err
 	}
 

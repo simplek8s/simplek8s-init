@@ -11,7 +11,7 @@ func TestGetCustomCmdlineValue(t *testing.T) {
 	testFile := filepath.Join(tdir, "test_cmdline.txt")
 
 	// Simulated /proc/cmdline content
-	cmdlineContent := "int_key=42 str_key=hello float_key=3.14 bool_key=true empty_key flag"
+	cmdlineContent := "int_key=42 str_key=hello float_key=3.14 bool_key=true empty_key bool_flag bool_false=false"
 	if err := os.WriteFile(testFile, []byte(cmdlineContent), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -28,7 +28,8 @@ func TestGetCustomCmdlineValue(t *testing.T) {
 		{testFile, "float_key", 0.0, 3.14, false},              // Valid float64
 		{testFile, "bool_key", false, true, false},             // Valid bool
 		{testFile, "empty_key", "default", "default", false},   // Empty value should return default
-		{testFile, "flag", false, false, false},                // Key without value should return default
+		{testFile, "bool_flag", false, true, false},            // Boolean key without value should return true
+		{testFile, "bool_false", true, false, false},           // Boolean key with falve value should return false
 		{testFile, "missing_key", "default", "default", false}, // Nonexistent key should return default
 		{testFile, "int_key", []string{}, "wrong_type", true},  // Incorrect type should error
 		{testFile + "_not_found", "int_key", 0, 0, true},       // Cmdline file not found should error

@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jlsalvador/simplek8s/pkg/linux/mount"
+	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/mount"
 )
 
 func TestGetBlockDevices_Success(t *testing.T) {
 	t.Cleanup(func() {
-		osStat = os.Stat
+		isPathExists = common.IsPathExists
 		osReadDir = os.ReadDir
 		doMount = mount.Mount
 		doUnmount = mount.Unmount
@@ -31,11 +32,11 @@ func TestGetBlockDevices_Success(t *testing.T) {
 		}
 	}
 
-	osStat = func(name string) (os.FileInfo, error) {
+	isPathExists = func(name string) bool {
 		if name == "/sys/class/block" {
-			return os.Stat(blockDir)
+			return common.IsPathExists(blockDir)
 		}
-		return os.Stat(name)
+		return common.IsPathExists(name)
 	}
 
 	osReadDir = func(name string) ([]os.DirEntry, error) {
@@ -63,17 +64,17 @@ func TestGetBlockDevices_Success(t *testing.T) {
 
 func TestGetBlockDevices_SysNotMounted(t *testing.T) {
 	t.Cleanup(func() {
-		osStat = os.Stat
+		isPathExists = common.IsPathExists
 		osReadDir = os.ReadDir
 		doMount = mount.Mount
 		doUnmount = mount.Unmount
 	})
 
-	osStat = func(name string) (os.FileInfo, error) {
+	isPathExists = func(name string) bool {
 		if name == "/sys/class/block" {
-			return nil, os.ErrNotExist
+			return false
 		}
-		return os.Stat(name)
+		return common.IsPathExists(name)
 	}
 
 	osReadDir = func(name string) ([]os.DirEntry, error) {
@@ -111,12 +112,12 @@ func TestGetBlockDevices_SysNotMounted(t *testing.T) {
 
 func TestGetBlockDevices_ReadDirError(t *testing.T) {
 	t.Cleanup(func() {
-		osStat = os.Stat
+		isPathExists = common.IsPathExists
 		osReadDir = os.ReadDir
 	})
 
-	osStat = func(name string) (os.FileInfo, error) {
-		return os.Stat(".")
+	isPathExists = func(name string) bool {
+		return common.IsPathExists(".")
 	}
 	osReadDir = func(name string) ([]os.DirEntry, error) {
 		return nil, errors.New("fake readdir error")

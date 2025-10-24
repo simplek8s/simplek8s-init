@@ -12,39 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sysroot
+// Package simpleinit bootstrap from (initrd) root to the next (systemd) root.
+package simpleinit
 
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-
-	log "github.com/sirupsen/logrus"
+	"simplek8s/pkg/log"
 )
 
-// CreateLegacySymlinks creates the next symlinks:
-//   - usr/bin  -> bin
-//   - usr/sbin -> sbin
-//   - usr/lib  -> lib
-//   - lib      -> lib64
-func CreateLegacySymlinks(where string) error {
+const CmdHelp = "Bootstrap from (initrd) root to the next (systemd) root."
+
+// CmdFn will:
+//   - Verifies that the process is PID 1.
+//   - Prepares the next root filesystem and switches to it.
+//   - Exits cleanly.
+func CmdFn() error {
 	log.Trace("start")
 	defer log.Trace("end")
 
-	for _, sl := range []struct {
-		old string
-		new string
-	}{
-		{"usr/bin", filepath.Join(where, "bin")},
-		{"usr/sbin", filepath.Join(where, "sbin")},
-		{"usr/lib", filepath.Join(where, "lib")},
-		{"lib", filepath.Join(where, "lib64")},
-	} {
-		if err := os.Symlink(sl.old, sl.new); err != nil {
-			uerr := fmt.Errorf("cannot create symlink %s as %s", sl.old, sl.new)
-			log.WithError(err).Error(uerr)
-			return uerr
-		}
+	// Check if we are PID 1.
+	pid := os.Getpid()
+	if pid != 1 {
+		return fmt.Errorf("not PID 1: %d", pid)
 	}
+
+	where := "/sysroot"
+
+	if err := createSysroot(where); err != nil {
+		return fmt.Errorf("cannot populate next root %s: %w", where, err)
+	}
+
+	if err := switchRoot(where); err != nil {
+		return fmt.Errorf("cannot chroot to %s: %w", where, err)
+	}
+
 	return nil
 }

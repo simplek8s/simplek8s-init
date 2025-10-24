@@ -1,53 +1,131 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strconv"
-	"time"
+	"runtime"
 
-	cmd "github.com/jlsalvador/simplek8s/internal/app/init"
-	"github.com/jlsalvador/simplek8s/pkg/common"
-	log "github.com/sirupsen/logrus"
+	l "github.com/sirupsen/logrus"
+
+	"simplek8s/pkg/log"
+	"simplek8s/pkg/simplek8s"
+
+	"simplek8s/internal/pkg/cmd/simpleinit"
+	"simplek8s/internal/pkg/cmd/wizard"
 )
 
-var Version string
+var Version = "0.0.1610038522"
 
-func showHelp() {
-	fmt.Println(Version)
+var cmds = []struct {
+	name string
+	fn   func() error
+	help string
+}{
+	{"init", simpleinit.CmdFn, simpleinit.CmdHelp},
+	{"wizard", wizard.CmdFn, wizard.CmdHelp},
+}
+
+func help() error {
+	l.Trace("start")
+	defer l.Trace("end")
+
+	_, err := fmt.Printf(`SimpleK8s v%s multi-call binary.
+
+Usage: %s [function [arguments]...]
+   or: function [arguments]...
+
+Currently defined functions:
+`, Version, filepath.Base(os.Args[0]))
+
+	for _, cmd := range cmds {
+		fmt.Printf("  %s\n", cmd.name)
+		if len(cmd.help) > 0 {
+			fmt.Printf("    %s\n", cmd.help)
+		}
+	}
+
+	return err
+}
+
+func fetchCmd() string {
+	log.Trace("start")
+	defer log.Trace("end")
+
+	if len(os.Args) == 1 {
+		return filepath.Base(os.Args[0])
+	} else if len(os.Args) > 1 {
+		// Linux kernel sends to us all tis kernel arguments.
+		if filepath.Base(os.Args[0]) == "init" {
+			return "init"
+		}
+		// From a shell, just the first argument is the command name.
+		return os.Args[1]
+	}
+	return ""
 }
 
 func main() {
-	if debug, _ := strconv.ParseBool(common.GetEnv("DEBUG", "false")); debug || common.IsCmdlineDebug() {
-		log.SetLevel(log.DebugLevel)
-		log.SetReportCaller(true)
+	if simplek8s.IsDebug() {
+		log.Level = log.LevelDebug
 
-		logFileName := fmt.Sprintf("simplek8s-init.%d.log", time.Now().Unix())
-		logFileName = filepath.Join(os.TempDir(), logFileName)
-		log.Infof("logfile: %s", logFileName)
-		if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err != nil {
-			log.Warn(err)
-		} else {
-			defer file.Close()
-			log.SetOutput(io.MultiWriter(file, os.Stdout)) // Write into file and stdout
+		l.SetLevel(l.DebugLevel)
+		l.SetReportCaller(true)
+		l.SetFormatter(&l.TextFormatter{
+			DisableTimestamp: true,
+		})
+	}
+
+	log.Trace("start")
+	defer log.Trace("end")
+
+	found := false
+	var err error
+	basename := fetchCmd()
+	for _, cmd := range cmds {
+		if basename == cmd.name {
+			found = true
+			err = cmd.fn()
 		}
 	}
-	defer log.Debug("done")
 
-	if cmd.IsCmdAlias(os.Args) {
-		if err := cmd.RunCmdAlias(os.Args); err != nil {
-			log.Error(err)
-			panic(err)
-		}
-	} else if cmd.IsSubcmd(os.Args) {
-		if err := cmd.RunSubCommands(os.Args); err != nil {
-			log.Error(err)
-			panic(err)
-		}
-	} else {
-		showHelp()
+	if !found {
+		err = help()
+	}
+
+	if err != nil {
+		// Print callback.
+		log.DebugFn(func() string {
+			msg := "Callback:\n"
+			pcs := make([]uintptr, 32)
+			n := runtime.Callers(11, pcs)
+			frames := runtime.CallersFrames(pcs[:n])
+			for {
+				frame, more := frames.Next()
+				msg += fmt.Sprintf("\t%s:%d %s\n", frame.File, frame.Line, frame.Function)
+				if !more {
+					break
+				}
+			}
+			return msg
+		})
+		log.Error(err.Error())
 		os.Exit(1)
 	}
+
+	os.Exit(0)
 }

@@ -1,4 +1,16 @@
 // Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package passwd
 
@@ -41,8 +53,8 @@ func TestMarshalUser(t *testing.T) {
 			user: User{
 				Name:     "jdoe",
 				Password: "x",
-				Uid:      1000,
-				Gid:      1000,
+				UID:      1000,
+				GID:      1000,
 				Gecos:    []string{"John Doe"},
 				Home:     "/home/jdoe",
 				Shell:    "/bin/bash",
@@ -53,15 +65,15 @@ func TestMarshalUser(t *testing.T) {
 			name: "defaults applied when password/home/shell missing",
 			user: User{
 				Name:  "sysuser",
-				Uid:   1,
-				Gid:   1,
+				UID:   1,
+				GID:   1,
 				Gecos: []string{},
 			},
 			want: "sysuser:x:1:1::/:/usr/bin/nologin",
 		},
 		{
 			name:      "missing name returns error",
-			user:      User{Password: "x", Uid: 100, Gid: 100},
+			user:      User{Password: "x", UID: 100, GID: 100},
 			expectErr: true,
 		},
 	}
@@ -98,8 +110,8 @@ func TestUnmarshalUser(t *testing.T) {
 			want: User{
 				Name:     "jdoe",
 				Password: "x",
-				Uid:      1000,
-				Gid:      1000,
+				UID:      1000,
+				GID:      1000,
 				Gecos:    []string{"John Doe"},
 				Home:     "/home/jdoe",
 				Shell:    "/bin/bash",
@@ -111,8 +123,8 @@ func TestUnmarshalUser(t *testing.T) {
 			want: User{
 				Name:     "sysuser",
 				Password: "x",
-				Uid:      1,
-				Gid:      1,
+				UID:      1,
+				GID:      1,
 				Gecos:    []string{""},
 				Home:     "/",
 				Shell:    "/usr/sbin/nologin",
@@ -134,8 +146,8 @@ func TestUnmarshalUser(t *testing.T) {
 			want: User{
 				Name:     "extra",
 				Password: "x",
-				Uid:      2000,
-				Gid:      2000,
+				UID:      2000,
+				GID:      2000,
 				Gecos:    []string{"Info"},
 				Home:     "/tmp",
 				Shell:    "/bin/zsh",

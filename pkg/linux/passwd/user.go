@@ -1,5 +1,18 @@
 // Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+// Package passwd (un)marshal /etc/{group,shadow,passwd}
 package passwd
 
 import (
@@ -15,12 +28,12 @@ type User struct {
 	Name string
 	// Could be ``, `*`, `!`, or `x`
 	//  -  ``: The user can login without password.
-	//  - `*`: The user can not login, but its account can run process.
+	//  - `*`: The user cannot login, but its account can run process.
 	//  - `!`: The user is locked.
 	//  - `x`: The user password is stored in /etc/shadow
 	Password string
-	Uid      int
-	Gid      int
+	UID      int
+	GID      int
 	Gecos    []string
 	Home     string
 	Shell    string
@@ -50,8 +63,8 @@ func (user User) Marshal() (string, error) {
 		password = "x"
 	}
 
-	uid := fmt.Sprint(user.Uid)
-	gid := fmt.Sprint(user.Gid)
+	uid := fmt.Sprint(user.UID)
+	gid := fmt.Sprint(user.GID)
 	gecos := strings.Join(user.Gecos, ",")
 
 	home := user.Home
@@ -81,13 +94,13 @@ func UnmarshalUser(entry string, user *User) error {
 			if err != nil {
 				return err
 			}
-			user.Uid = valueAsInt
+			user.UID = valueAsInt
 		case 3:
 			valueAsInt, err := strconv.Atoi(value)
 			if err != nil {
 				return err
 			}
-			user.Gid = valueAsInt
+			user.GID = valueAsInt
 		case 4:
 			user.Gecos = strings.Split(value, ",")
 		case 5:
