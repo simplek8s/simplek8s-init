@@ -34,7 +34,7 @@ func PopulateDev() error {
 	}
 
 	// Execute systemd-udevd as daemon on background.
-	cmd := exec.Command("/usr/lib/systemd/systemd-udevd", "--daemon")
+	cmd := exec.Command("/usr/lib/systemd/systemd-udevd")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("cannot start systemd-udevd: %w", err)
 	}

@@ -17,6 +17,8 @@ package mount
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -145,11 +147,30 @@ var Mountpoints = struct {
 	Usr:     MountPoint{"/usr", 0o755, "none", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
 }
 
+func blkidType(dev string) (string, error) {
+	cmd := "/usr/sbin/blkid"
+	args := []string{"-o", "value", "-s", "TYPE", dev}
+	out, err := exec.Command(cmd, args...).Output()
+	if err != nil {
+		return "", fmt.Errorf("error executing: %s %s: %w", cmd, strings.Join(args, " "), err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // Mount creates destination directory and mounts the mountpoints there.
 func Mount(mount MountPoint) error {
 	// Ensure that destination exists.
 	if err := os.MkdirAll(mount.Target, mount.Chmod); err != nil {
 		return fmt.Errorf("mkdir %s failed: %w", mount.Target, err)
+	}
+
+	// unix.Mount requires FSType, it can not be empty or auto.
+	if mount.Source != "" && mount.Source != "none" && (mount.Fstype == "" || mount.Fstype == "auto") {
+		fstype, err := blkidType(mount.Source)
+		if err != nil {
+			return fmt.Errorf("cannot fetch filesystem type from %s: %w", mount.Source, err)
+		}
+		mount.Fstype = fstype
 	}
 
 	// Mount on destination.
