@@ -20,12 +20,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"simplek8s/pkg/common"
 	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/passwd"
+	"simplek8s/pkg/simplek8s/udev"
 
-	"github.com/coreos/go-systemd/v22/unit"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,8 +55,29 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 	return nil
 }
 
-// writeMounts requires "${where}/run" mounted in order to write systemd
-// transient units there.
+func resolveFlags(opts []string) (mount.MountFlag, string) {
+	var flags mount.MountFlag
+	data := []string{}
+
+	for _, opt := range opts {
+		if f, ok := mount.MountFlags[opt]; ok {
+			flags |= f
+		} else {
+			data = append(data, opt)
+		}
+	}
+
+	return flags, strings.Join(data, ",")
+}
+
+// Because all of these requirements, we are going to mount all
+// mountpoints in the initrd stage:
+//
+//   - /sysroot/etc must be mounted by initrd, because systemd requires rootfs
+//     or /etc to be mounted before exec /sbin/init.
+//   - /sysroot/etc requires /sysroot/var to be mounted, because /sysroot/etc
+//     binds to /sysroot/var/etc by default.
+//   - simplek8s.yaml could defines more complex environments to mount /etc.
 func writeMounts(mounts []Mount, where string) error {
 	log.WithFields(log.Fields{
 		"mounts": mounts,
@@ -63,56 +85,35 @@ func writeMounts(mounts []Mount, where string) error {
 	}).Trace("start")
 	defer log.Trace("end")
 
-	// We will use systemd units to mount these mountpoints.
-
-	// These units must be saved into /run/systemd/system/.
-	// So we need to mount `${where}/run` before.
-	dst := filepath.Join(where, mount.Mountpoints.Run.Target)
-	if !common.IsPathExists(dst) {
-		mRun := mount.Mountpoints.Run
-		mRun.Target = filepath.Join(dst)
-		if err := mount.Mount(mRun); err != nil {
-			log.WithError(err).Error("cannot mount " + mRun.Target)
-			return err
-		}
+	// Fill /dev by udev.
+	// This step is required for example to search disk by label or UUID.
+	if err := udev.PopulateDev(); err != nil {
+		return fmt.Errorf("cannot populate /dev by udev: %w", err)
 	}
 
-	// Create systemd mount unit for each mountpoint into `${where}/run/systemd/system/`.
 	for _, m := range mounts {
-		var dst string
-		var content string
-
-		if m.Where == "/var" {
-			dst = filepath.Join(where, "/run/systemd/system/var.mount.d/drop-in.conf")
-			content = fmt.Sprintf(`[Mount]
-What=%s
-Where=%s
-Type=%s
-Options=%s
-`, m.What, m.Where, m.Type, m.Options)
-		} else {
-			escapedName := unit.UnitNameEscape(m.Where)
-			unitName := fmt.Sprintf("%s.mount", escapedName)
-			dst = filepath.Join(where, "/run/systemd/system/", unitName)
-			content = fmt.Sprintf(`[Unit]
-Description=%s mountpoint
-DefaultDependencies=no
-Conflicts=umount.target
-Before=local-fs.target
-Before=umount.target
-After=network.target
-
-[Mount]
-What=%s
-Where=%s
-Type=%s
-Options=%s
-`, escapedName, m.What, m.Where, m.Type, m.Options)
+		flags, data := resolveFlags(strings.Split(m.Options, ","))
+		mp := mount.MountPoint{
+			Target: filepath.Join(where, m.Where),
+			Chmod:  0o755,
+			Source: m.What,
+			Fstype: m.Type,
+			Flags:  flags,
+			Data:   data,
 		}
 
-		if err := ensureWriteFile(dst, []byte(content), 0o644, 0, 0); err != nil {
-			log.WithError(err).Error("cannot write mount unit " + dst)
-			return err
+		if mp.Flags&mount.MountFlagBind != 0 {
+			// Fix source for bind mounts.
+			mp.Source = filepath.Join(where, mp.Source)
+
+			// Ensure the source directory exists for bind mounts.
+			if err := os.MkdirAll(mp.Source, mp.Chmod); err != nil {
+				return fmt.Errorf("cannot create directory %s: %w", mp.Target, err)
+			}
+		}
+
+		if err := mount.Mount(mp); err != nil {
+			return fmt.Errorf("cannot mount %s in %s: %w", mp.Source, mp.Target, err)
 		}
 	}
 

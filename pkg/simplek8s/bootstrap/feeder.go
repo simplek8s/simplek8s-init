@@ -575,11 +575,13 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 	}
 
 	for _, m := range config.Storage.Mounts {
-		sysroot.Mounts = append(sysroot.Mounts, sr.Mount{
+		sysroot.Mounts = common.UpdateOrAppend(sysroot.Mounts, sr.Mount{
 			What:    m.What,
 			Where:   m.Where,
 			Type:    common.Get(m.Type, ""),
 			Options: common.Get(m.Options, ""),
+		}, func(a, b sr.Mount) bool {
+			return a.Where == b.Where
 		})
 	}
 

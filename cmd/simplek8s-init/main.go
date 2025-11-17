@@ -21,6 +21,7 @@ import (
 	"runtime"
 
 	l "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 
 	"simplek8s/pkg/log"
 	"simplek8s/pkg/simplek8s"
@@ -124,6 +125,12 @@ func main() {
 			return msg
 		})
 		log.Error(err.Error())
+
+		if simplek8s.IsDebug() {
+			fmt.Printf("Debug is true, dropping to a shell instead of crash.\n\n")
+			unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
+		}
+
 		os.Exit(1)
 	}
 

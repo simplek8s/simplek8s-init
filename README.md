@@ -29,7 +29,7 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
     - `where` (string)
     - _`type`_ (string): Default is "auto".
     - _`options`_ (string): Default is "defaults".
-    - _`after`_ (list of string):
+    - DEPRECATED: ~~_`after`_ (list of string):~~
   - _`links`_ (list of objects):
     - _`overwrite`_ (boolean): Default is false.
     - `path` (string)

@@ -33,7 +33,6 @@ import (
 	"simplek8s/pkg/simplek8s/bootstrap"
 	"simplek8s/pkg/simplek8s/generateshadow"
 	"simplek8s/pkg/simplek8s/sysroot"
-	"simplek8s/pkg/simplek8s/sysroot/feeder"
 )
 
 // createUsr mounts tmpfs into `where` (normally `/sysroot/usr`), populates it
@@ -57,8 +56,8 @@ func createUsr(where string) error {
 		return fmt.Errorf("cannot copy from /usr to %s: %w", mUsr.Target, err)
 	}
 
-	// Create `${where}/usr/libexec` and `${where}/usr/local` for future bind mounts from `${where}/var`.
-	for _, d := range []string{"/libexec", "/local"} {
+	// Create `${where}/usr/libexec/kubernetes` and `${where}/usr/local` for future bind mounts from `${where}/var`.
+	for _, d := range []string{"/libexec/kubernetes", "/local"} {
 		dst := filepath.Join(where, d)
 		if err := os.MkdirAll(dst, 0o755); err != nil {
 			return fmt.Errorf("cannot create directory %s: %w", dst, err)
@@ -69,10 +68,7 @@ func createUsr(where string) error {
 	if err := mount.Mount(mount.MountPoint{
 		Target: where,
 		Chmod:  mount.Mountpoints.Usr.Chmod,
-		Source: "",
-		Fstype: "",
 		Flags:  mount.MountFlagRemount | mount.MountFlagReadOnly,
-		Data:   "",
 	}); err != nil {
 		return fmt.Errorf("cannot remount as RO %s: %w", where, err)
 	}
@@ -97,15 +93,6 @@ func createSysroot(where string) error {
 		return fmt.Errorf("cannot create %s, %w", usrDst, err)
 	}
 
-	// Create legacy symlinks as:
-	//   - usr/bin  -> bin
-	//   - usr/sbin -> sbin
-	//   - usr/lib  -> lib
-	//   - lib      -> lib64
-	if err := sysroot.CreateLegacySymlinks(where); err != nil {
-		return fmt.Errorf("cannot create legacy symlinks into %s: %w", where, err)
-	}
-
 	// Mount /sysroot/run (tmpfs).
 	// Required to write systemd transient units and "simplek8s.yaml".
 	mRun := mount.Mountpoints.Run
@@ -114,10 +101,85 @@ func createSysroot(where string) error {
 		return fmt.Errorf("cannot mount %s: %w", mRun.Target, err)
 	}
 
-	sr := &sysroot.Sysroot{}
-
-	if err := feeder.FeedSysrootByDefault(sr); err != nil {
-		return fmt.Errorf("cannot feed sysroot by default: %w", err)
+	sr := &sysroot.Sysroot{
+		Links: []sysroot.Link{{
+			Overwrite: true,
+			Path:      "/bin",
+			Target:    "usr/bin",
+			UID:       0,
+			GID:       0,
+			Hard:      false,
+		}, {
+			Overwrite: true,
+			Path:      "/sbin",
+			Target:    "usr/sbin",
+			UID:       0,
+			GID:       0,
+			Hard:      false,
+		}, {
+			Overwrite: true,
+			Path:      "/lib",
+			Target:    "usr/lib",
+			UID:       0,
+			GID:       0,
+			Hard:      false,
+		}, {
+			Overwrite: true,
+			Path:      "/lib64",
+			Target:    "lib",
+			UID:       0,
+			GID:       0,
+			Hard:      false,
+		}},
+		Files: []sysroot.File{{
+			Overwrite: false,
+			Filename:  "/etc/machine-id",
+			Content:   []byte("uninitialized\n"),
+			Mode:      0o644,
+			UID:       0,
+			GID:       0,
+		}},
+		Mounts: []sysroot.Mount{{
+			What:    "none",
+			Where:   "/var",
+			Type:    "tmpfs",
+			Options: "size=90%",
+		}, {
+			What:    "/var/etc",
+			Where:   "/etc",
+			Type:    "none",
+			Options: "rbind",
+		}, {
+			What:    "/var/home",
+			Where:   "/home",
+			Type:    "none",
+			Options: "rbind",
+		}, {
+			What:    "/var/mnt",
+			Where:   "/mnt",
+			Type:    "none",
+			Options: "rbind",
+		}, {
+			What:    "/var/opt",
+			Where:   "/opt",
+			Type:    "none",
+			Options: "rbind",
+		}, {
+			What:    "/var/root",
+			Where:   "/root",
+			Type:    "none",
+			Options: "rbind",
+		}, {
+			What:    "/var/usr/libexec/kubernetes",
+			Where:   "/usr/libexec/kubernetes",
+			Type:    "none",
+			Options: "rbind",
+		}, {
+			What:    "/var/usr/local",
+			Where:   "/usr/local",
+			Type:    "none",
+			Options: "rbind",
+		}},
 	}
 
 	// Get timeout from rootwait cmdline.

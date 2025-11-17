@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	rnd "math/rand"
 	"strings"
+	"unicode"
 
 	"simplek8s/pkg/simplek8s"
 
@@ -116,16 +118,108 @@ func GenerateShadowPassword(password string) (string, error) {
 	return hash, nil
 }
 
+// RandomUppercase randomizes uppercase conversion of n characters within a string.
+func RandomUppercase(s string, n int) string {
+	runes := []rune(s)
+	length := len(runes)
+
+	if n <= 0 || length == 0 {
+		return s
+	}
+
+	if n > length {
+		n = length
+	}
+
+	// Create a list of all positions
+	indices := rnd.Perm(length)[:n]
+
+	for _, idx := range indices {
+		runes[idx] = unicode.ToUpper(runes[idx])
+	}
+
+	return string(runes)
+}
+
+// LeetMap holds character substitutions.
+var LeetMap = map[rune]rune{
+	'A': '4', 'a': '4',
+	'E': '3', 'e': '3',
+	'I': '1', 'i': '1',
+	'O': '0', 'o': '0',
+	'S': '5', 's': '5',
+	'T': '7', 't': '7',
+	'B': '8', 'b': '8',
+	'G': '6', 'g': '6',
+	'Z': '2', 'z': '2',
+}
+
+// ReplacementList stores all allowed substitutions for a rune.
+var ReplacementList = map[rune][]rune{
+	'A': {'4', '@'}, 'a': {'4', '@'},
+	'E': {'3', '&'}, 'e': {'3', '&'},
+	'I': {'1', '!'}, 'i': {'1', '!'},
+	'O': {'0', '*'}, 'o': {'0', '*'},
+	'S': {'5', '$'}, 's': {'5', '$'},
+	'T': {'7', '+'}, 't': {'7', '+'},
+	'B': {'8', 'ß'}, 'b': {'8', 'ß'},
+	'G': {'6', '9'}, 'g': {'6', '9'},
+	'Z': {'2', '%'}, 'z': {'2', '%'},
+	'H': {'#'}, 'h': {'#'},
+	'C': {'('}, 'c': {'('},
+	'K': {'<'}, 'k': {'<'},
+	'X': {'%'}, 'x': {'%'},
+	'Q': {'?'}, 'q': {'?'},
+}
+
+// RandomDecorate randomly transforms n characters using ReplacementList.
+func RandomDecorate(s string, n int) string {
+	runes := []rune(s)
+	length := len(runes)
+
+	if n <= 0 || length == 0 {
+		return s
+	}
+
+	// Find eligible indices
+	indices := make([]int, 0)
+	for i, r := range runes {
+		if _, ok := ReplacementList[r]; ok {
+			indices = append(indices, i)
+		}
+	}
+
+	if len(indices) == 0 {
+		return s
+	}
+	if n > len(indices) {
+		n = len(indices)
+	}
+
+	rnd.Shuffle(len(indices), func(i, j int) { indices[i], indices[j] = indices[j], indices[i] })
+
+	// Replace characters
+	for _, idx := range indices[:n] {
+		reps := ReplacementList[runes[idx]]
+		runes[idx] = reps[rnd.Intn(len(reps))]
+	}
+
+	return string(runes)
+}
+
 // Generates a password.
 // defaultPwd will be used when debug is true.
 func GeneratePwd(defaultPwd string) (plain string, hashed string, err error) {
 	if !simplek8s.IsDebug() {
+		nWords := 3
 		// generate a secure password.
-		words, err := GeneratePronounceablePassphrase(4, 2)
+		words, err := GeneratePronounceablePassphrase(nWords, 2)
 		if err != nil {
 			return "", "", fmt.Errorf("cannot generate passphrase: %w", err)
 		}
 		defaultPwd = strings.Join(words, "-")
+		defaultPwd = RandomUppercase(defaultPwd, 1)
+		defaultPwd = RandomDecorate(defaultPwd, 1)
 	}
 
 	hash, err := GenerateShadowPassword(defaultPwd)
