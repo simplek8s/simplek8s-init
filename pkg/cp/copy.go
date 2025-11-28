@@ -1,6 +1,7 @@
 package cp
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -16,31 +17,200 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Wrappers that can be mocked in tests.
+var (
+	commonCreateSymlink = common.CreateSymlink
+	sysLchown           = os.Lchown
+	sysLutimes          = unix.Lutimes
+	sysReadlink         = os.Readlink
+	getUIDFromFileInfo  = func(fi fs.FileInfo) (int, bool) {
+		if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+			return int(stat.Uid), true
+		}
+		return -1, false
+	}
+	getGIDFromFileInfo = func(fi fs.FileInfo) (int, bool) {
+		if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+			return int(stat.Gid), true
+		}
+		return -1, false
+	}
+	getAccessModificationTimes = func(fi fs.FileInfo) ([]unix.Timeval, bool) {
+		if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+			return []unix.Timeval{
+				{Sec: stat.Atim.Sec, Usec: stat.Atim.Nsec / 1000},
+				{Sec: stat.Mtim.Sec, Usec: stat.Mtim.Nsec / 1000},
+			}, true
+		}
+		return nil, false
+	}
+)
+
 type CopyOptions struct {
 	// Overwrite destination files.
 	Overwrite bool
 	// Supports go:embed.
 	Fsys fs.FS
-	// Set the destionation directory mode (ex: 0755).
+	// Set the destionation directory mode (ex: 0o755).
 	// Set as 0 to copy perm from source.
 	DirPerm fs.FileMode
-	// Set the destionation file mode (ex: 0644).
+	// Set the destionation file mode (ex: 0o644).
 	// Set as 0 to copy perm from source.
 	FilePerm fs.FileMode
 	// Set the destination user id owner.
+	// Set as -1 to copy from source.
 	Uid int
 	// Set the destination group id owner.
+	// Set as -1 to copy from source.
 	Gid int
 	// Exclude entries that match these regexp.
 	Exclude []*regexp.Regexp
 
 	PreserveAll    bool
-	PreservePerm   bool
 	PreserveATime  bool
 	PreserveMTime  bool
 	PreserveUid    bool
 	PreserveGid    bool
 	PreserveXAttrs bool
+}
+
+func copyDir(dst string, fi fs.FileInfo, opt *CopyOptions) error {
+	perm := fi.Mode().Perm()
+	if opt.DirPerm != 0 {
+		perm = opt.DirPerm
+	}
+	if err := os.MkdirAll(dst, perm); err != nil {
+		log.WithFields(log.Fields{"dst": dst, "perm": perm}).Error(err)
+		return err
+	}
+	return nil
+}
+
+func copyRegular(src, dst string, fi fs.FileInfo, opt *CopyOptions) error {
+	perm := fi.Mode().Perm()
+	if opt.FilePerm != 0 {
+		perm = opt.FilePerm
+	}
+
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		log.WithField("dst", dst).Error(err)
+		return err
+	}
+
+	// Remove possible exists file.
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		log.WithField("dst", dst).Error(err)
+		return err
+	}
+
+	// Open src to read.
+	log.WithFields(log.Fields{
+		"src":      src,
+		"opt.Fsys": opt.Fsys,
+	}).Trace()
+	fSrc, err := opt.Fsys.Open(src)
+	if err != nil {
+		log.WithFields(log.Fields{"src": src}).Error(err)
+		return err
+	}
+	defer fSrc.Close()
+
+	// Open dst to write.
+	flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	fDst, err := os.OpenFile(dst, flag, perm)
+	if err != nil {
+		log.WithFields(log.Fields{"dst": dst, "flag": flag, "perm": perm}).Error(err)
+		return err
+	}
+	defer fDst.Close()
+
+	// Copy from src to dst.
+	if _, err := io.Copy(fDst, fSrc); err != nil {
+		log.WithFields(log.Fields{"fDst": fDst, "fSrc": fSrc}).Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func copySymlink(fullname, dst string, opt *CopyOptions) error {
+	target, err := sysReadlink(fullname)
+	if err != nil {
+		log.WithField("fullname", fullname).Error(err)
+		return err
+	}
+
+	if err := commonCreateSymlink(dst, target, true, opt.Uid, opt.Gid, false); err != nil {
+		log.WithFields(log.Fields{
+			"target": target,
+			"dst":    dst,
+		}).Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func preserveOwnership(fi fs.FileInfo, dst string, opt *CopyOptions) error {
+	var uid, gid = -1, -1
+
+	if opt.Uid >= 0 {
+		// Explicit override UID.
+		uid = opt.Uid
+	} else if opt.PreserveUid {
+		// Copy UID from src.
+		if u, ok := getUIDFromFileInfo(fi); ok {
+			uid = u
+		}
+	}
+
+	if opt.Gid >= 0 {
+		// Explicit override GID.
+		gid = opt.Gid
+	} else if opt.PreserveGid {
+		// Copy GID from src.
+		if g, ok := getGIDFromFileInfo(fi); ok {
+			gid = g
+		}
+	}
+
+	if uid >= 0 || gid >= 0 {
+		if err := sysLchown(dst, uid, gid); err != nil {
+			log.WithFields(log.Fields{
+				"dst": dst,
+				"uid": uid,
+				"gid": gid,
+			}).Error(err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Preserve atime and mtime.
+func preserveTimestamps(fi fs.FileInfo, dst string, opt *CopyOptions) error {
+	if !(opt.PreserveATime || opt.PreserveMTime) {
+		return nil
+	}
+
+	tv, ok := getAccessModificationTimes(fi)
+	if !ok {
+		err := fmt.Errorf("cannot stat file %s for metadata preservation", fi.Name())
+		log.WithField("fi", fi).Error(err)
+		return err
+	}
+
+	if err := sysLutimes(dst, tv); err != nil {
+		log.WithFields(log.Fields{
+			"dst": dst,
+			"tv":  tv,
+		}).Error(err)
+		return err
+	}
+
+	return nil
 }
 
 // Doc:
@@ -49,183 +219,47 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 	log.WithFields(log.Fields{
 		"srcPath": srcPath,
 		"src":     src,
-		"fi":      fi,
 		"dst":     dst,
-		"opt":     opt,
 	}).Trace("start")
 	defer log.Trace("end")
 
-	// Skip exist entries if overwrite is false
-	info, _ := os.Stat(dst)
-	if !opt.Overwrite && info != nil {
-		log.WithFields(log.Fields{
-			"dst": dst,
-		}).Debug("skip overwrite")
-		return nil
+	// Early return: overwrite check.
+	if !opt.Overwrite {
+		if _, err := os.Stat(dst); err == nil {
+			log.WithField("dst", dst).Debug("skip overwrite")
+			return nil
+		}
 	}
 
 	fullname := filepath.Join(srcPath, src)
 	mode := fi.Mode()
-	perm := mode.Perm()
 
-	var stat *syscall.Stat_t
-	if opt.PreserveAll || opt.PreserveUid || opt.PreserveGid || opt.PreserveATime || opt.PreserveMTime {
-		if s, ok := fi.Sys().(*syscall.Stat_t); !ok {
-			log.WithFields(log.Fields{
-				"fullname": fullname,
-			}).Warn("cannot stat file, we cannot preserve: uid, gid, atime, mtime")
-		} else {
-			stat = s
-		}
-	}
-
+	var err error
 	switch {
 	case mode.IsDir():
-		if opt.DirPerm != 0x0 {
-			perm = opt.DirPerm
-		}
+		err = copyDir(dst, fi, opt)
 
-		if err := os.MkdirAll(dst, perm); err != nil {
-			log.WithFields(log.Fields{
-				"dst":  dst,
-				"perm": perm,
-			}).Error(err)
-			return err
-		}
 	case mode.IsRegular():
-		if opt.FilePerm != 0x0 {
-			perm = opt.FilePerm
-		}
+		err = copyRegular(src, dst, fi, opt)
 
-		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-			log.WithFields(log.Fields{
-				"dst": dst,
-			}).Error(err)
-			return err
-		}
-
-		// Remove possible exists file
-		if common.IsPathExists(dst) {
-			if err := os.Remove(dst); err != nil {
-				log.WithFields(log.Fields{
-					"dst": dst,
-				}).Error(err)
-				return err
-			}
-		}
-
-		log.WithField("src", src).WithField("opt.Fsys", opt.Fsys).Trace()
-		fSrc, err := opt.Fsys.Open(src)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"src": src,
-			}).Error(err)
-			return err
-		}
-		defer fSrc.Close()
-
-		flag := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-		fDst, err := os.OpenFile(dst, flag, perm)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"dst":  dst,
-				"flag": flag,
-				"perm": perm,
-			}).Error(err)
-			return err
-		}
-		defer fDst.Close()
-
-		if _, err := io.Copy(fDst, fSrc); err != nil {
-			log.WithFields(log.Fields{
-				"fDst": fDst,
-				"fSrc": fSrc,
-			}).Error(err)
-			return err
-		}
 	case mode&os.ModeSymlink != 0:
-		//TODO: Error when fs.FS is not supported
+		err = copySymlink(fullname, dst, opt)
 
-		target, err := os.Readlink(fullname)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"fullname": fullname,
-			}).Error(err)
-			return err
-		}
-		if err := common.CreateSymlink(dst, target, true, opt.Uid, opt.Gid, false); err != nil {
-			log.WithFields(log.Fields{
-				"taget": target,
-				"dst":   dst,
-			}).Error(err)
-			return err
-		}
-	case mode&os.ModeNamedPipe != 0:
-		fallthrough
-	case mode&os.ModeSocket != 0:
-		//TODO
-		panic("unimplemented")
-	case mode&os.ModeDevice != 0:
-		//TODO
-		panic("unimplemented")
 	default:
-		//TODO
-		panic("unimplemented")
+		err = fmt.Errorf("unsupported file type (%v) at %s", mode, fullname)
+	}
+	if err != nil {
+		return err
 	}
 
-	// Copy uid and gid
-	if opt.PreserveUid || opt.PreserveGid || opt.Uid >= 0 || opt.Gid >= 0 {
-		uid := opt.Uid
-		gid := opt.Gid
-
-		// Get current file uid and gid to remplace invalid values
-		if stat != nil {
-			if uid < 0 {
-				uid = int(stat.Uid)
-			}
-			if gid < 0 {
-				gid = int(stat.Gid)
-			}
-		}
-
-		// Change uid and gid
-		if uid < 0 || gid < 0 {
-			log.WithFields(log.Fields{
-				"fullname": fullname,
-				"uid":      uid,
-				"gid":      gid,
-			}).Warn("cannot set chown")
-		} else {
-			if err := os.Lchown(dst, uid, gid); err != nil {
-				log.WithFields(log.Fields{
-					"dst": dst,
-					"uid": uid,
-					"gid": gid,
-				}).Error(err)
-				return err
-			}
-		}
+	// After writing, preserve metadata.
+	if err := preserveOwnership(fi, dst, opt); err != nil {
+		return err
 	}
-
-	// Copy atime & mtime
-	if opt.PreserveATime || opt.PreserveMTime {
-		if stat != nil {
-			tv := []unix.Timeval{
-				{Sec: stat.Atim.Sec, Usec: stat.Atim.Nsec},
-				{Sec: stat.Mtim.Sec, Usec: stat.Mtim.Nsec},
-			}
-			if err := unix.Lutimes(dst, tv); err != nil {
-				log.WithFields(log.Fields{
-					"dst": dst,
-					"tv":  tv,
-				}).Error(err)
-				return err
-			}
-		}
+	if err := preserveTimestamps(fi, dst, opt); err != nil {
+		return err
 	}
-
-	//TODO: Copy xattrs
+	//TODO: Preserve xattrs.
 
 	return nil
 }
@@ -241,7 +275,6 @@ func getOptionsWithDefaults(options *CopyOptions, src string) (string, *CopyOpti
 		Gid:            -1,
 		Exclude:        []*regexp.Regexp{},
 		PreserveAll:    false,
-		PreservePerm:   true,
 		PreserveATime:  false,
 		PreserveMTime:  false,
 		PreserveUid:    false,
@@ -268,7 +301,6 @@ func getOptionsWithDefaults(options *CopyOptions, src string) (string, *CopyOpti
 		opt.Gid = options.Gid
 
 		opt.PreserveAll = options.PreserveAll
-		opt.PreservePerm = options.PreserveAll || options.PreservePerm
 		opt.PreserveATime = options.PreserveAll || options.PreserveATime
 		opt.PreserveMTime = options.PreserveAll || options.PreserveMTime
 		opt.PreserveUid = options.PreserveAll || options.PreserveUid
@@ -293,8 +325,8 @@ func copyFile(src string, dst string, fi fs.FileInfo, path string, root string, 
 	}).Trace("start")
 	defer log.Trace("end")
 
-	cPath := strings.TrimLeft(path, root)
-	cPath = strings.TrimLeft(cPath, string(filepath.Separator))
+	cPath := strings.TrimPrefix(path, root)
+	cPath = strings.TrimPrefix(cPath, string(filepath.Separator))
 	cPath = filepath.Clean(cPath)
 	dstFullname := filepath.Join(dst, cPath)
 
