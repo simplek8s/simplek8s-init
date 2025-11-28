@@ -12,42 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package simpleinit bootstrap from (initrd) root to the next (systemd) root.
-package simpleinit
+package mkpasswd
 
 import (
-	"fmt"
-	"os"
-
+	"errors"
 	"simplek8s/pkg/log"
-	"simplek8s/pkg/simplek8s"
 )
 
-const CmdHelp = "Bootstrap from (initrd) root to the next (systemd) root."
+const CmdHelp = "Generate a hashed shadow password. Usage: mkpasswd [options]"
 
 // CmdFn will:
-//   - Verifies that the process is PID 1.
-//   - Prepares the next root filesystem and switches to it.
+//   - Generates a hashed shadow password based on user input or default settings.
 //   - Exits cleanly.
 func CmdFn() error {
-	logToDevKmsg()
-
 	log.Trace("start")
 	defer log.Trace("end")
 
-	// Check if we are PID 1.
-	pid := os.Getpid()
-	if pid != 1 {
-		return fmt.Errorf("not PID 1: %d", pid)
-	}
+	//TODO: Ask for user input and print hashed password.
+	//TODO: Generate random password and print plained and hashed password.
 
-	where := "/sysroot"
-	err := bootNextRoot(where)
-
-	// We are PID1, so we can't crash when DEBUG is set.
-	if err != nil && simplek8s.IsDebug() {
-		return dropToShell(where, "Debug is true, dropping to a shell instead of crash.")
-	}
-
-	return err
+	return errors.New("unimplemented")
 }

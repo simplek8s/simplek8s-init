@@ -25,6 +25,7 @@ import (
 	"syscall"
 
 	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/passwd"
 	sr "simplek8s/pkg/simplek8s/sysroot"
 
@@ -170,11 +171,11 @@ func updateOrAppendFile(files []sr.File, file sr.File) []sr.File {
 	})
 }
 
-// feedByBootstrapConfigGroupsWithGUIDs appends into sysroot.Groups user
-// defined groups with proper GIDs.
+// feedByBootstrapConfigGroupsWithGIDs appends into sysroot.Groups groups with
+// proper GIDs.
 //
 // Groups without GIDs or empty names will be skipped.
-func feedByBootstrapConfigGroupsWithGUIDs(sysroot *sr.Sysroot, config Config) {
+func feedByBootstrapConfigGroupsWithGIDs(config Config, sysroot *sr.Sysroot) {
 	// First, create user defined groups with proper GIDs.
 	for _, group := range config.Groups {
 		// Skip empty group names.
@@ -192,7 +193,7 @@ func feedByBootstrapConfigGroupsWithGUIDs(sysroot *sr.Sysroot, config Config) {
 			GID:  *group.GID,
 		})
 		sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, group, func(a, b passwd.Group) bool {
-			return a.Name == b.Name
+			return a.GID == b.GID
 		})
 	}
 }
@@ -208,30 +209,27 @@ func feedByBootstrapConfigGroupsFromUsers(config Config, sysroot *sr.Sysroot) {
 			continue
 		}
 
-		// Skip user if there is already a (user defined) group with the same user.GID.
+		// Skip user if there is already a group with the same user.GID.
 		if user.GID != nil && slices.IndexFunc(sysroot.Groups, func(group passwd.Group) bool {
 			return group.GID == *user.GID
 		}) >= 0 {
 			continue
 		}
 
-		isSystem := common.Get(user.System, false)
-		gid := common.Get(user.GID, getNextGID(sysroot.Groups, isSystem))
-
-		// Find GID that does not collides with the already defined groups.
-		if slices.IndexFunc(sysroot.Groups, func(g passwd.Group) bool {
-			return g.GID == gid
-		}) >= 0 {
-			gid = getNextGID(sysroot.Groups, isSystem)
+		var gid int
+		if user.Name == "root" {
+			gid = 0
+		} else {
+			isSystem := common.Get(user.System, false)
+			gid = common.Get(user.GID, getNextGID(sysroot.Groups, isSystem))
 		}
 
-		sysroot.Groups = append(sysroot.Groups, passwd.NewGroup(passwd.Group{
+		sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, passwd.NewGroup(passwd.Group{
 			Name: user.Name,
 			GID:  gid,
-			UserList: []string{
-				user.Name,
-			},
-		}))
+		}), func(a, b passwd.Group) bool {
+			return a.GID == b.GID
+		})
 	}
 }
 
@@ -253,12 +251,12 @@ func feedByBootstrapConfigGroupsWithoutGIDs(config Config, sysroot *sr.Sysroot) 
 
 		isSystem := common.Get(group.System, false)
 		gid := getNextGID(sysroot.Groups, isSystem)
-		group := passwd.NewGroup(passwd.Group{
+		g := passwd.NewGroup(passwd.Group{
 			Name: group.Name,
 			GID:  gid,
 		})
-		sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, group, func(a, b passwd.Group) bool {
-			return a.Name == b.Name
+		sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, g, func(a, b passwd.Group) bool {
+			return a.GID == b.GID
 		})
 	}
 }
@@ -270,7 +268,7 @@ func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
 	}).Trace("start")
 	defer log.Trace("end")
 
-	feedByBootstrapConfigGroupsWithGUIDs(sysroot, config)
+	feedByBootstrapConfigGroupsWithGIDs(config, sysroot)
 	feedByBootstrapConfigGroupsFromUsers(config, sysroot)
 	feedByBootstrapConfigGroupsWithoutGIDs(config, sysroot)
 
@@ -280,6 +278,69 @@ func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
 	})
 
 	return nil
+}
+
+func determineHomeAndShell(user User) (string, string) {
+	isSystem := common.Get(user.System, false)
+
+	switch {
+	case user.Name == "root":
+		return "/root", "/usr/bin/sh"
+
+	case !isSystem:
+		return fmt.Sprintf("/home/%s", user.Name), "/usr/bin/sh"
+
+	default:
+		return "/", "/usr/sbin/nologin"
+	}
+}
+
+func determineUIDGID(sysroot *sr.Sysroot, user User) (int, int) {
+	isSystem := common.Get(user.System, false)
+
+	switch {
+	case user.Name == "root":
+		gid := getGIDByName(sysroot.Groups, "root")
+		if gid == nil {
+			group := passwd.NewGroup(passwd.Group{
+				Name:     "root",
+				Password: "",
+				GID:      0,
+				UserList: []string{"root"},
+			})
+			sysroot.Groups = common.UpdateOrAppend(sysroot.Groups, group, func(a, b passwd.Group) bool {
+				return a.GID == b.GID
+			})
+			gid = pointy.Int(0)
+		}
+		return common.Get(user.UID, 0), common.Get(user.GID, *gid)
+
+	default:
+		gid := common.Get(user.GID, -1)
+		if gid == -1 {
+			// Find a group with the same user.Name.
+			gid = common.Get(getGIDByName(sysroot.Groups, user.Name), -1)
+		}
+		if gid == -1 {
+			// Create a new group with the same user.Name.
+			group := passwd.NewGroup(passwd.Group{
+				Name:     user.Name,
+				Password: "",
+				GID:      getNextGID(sysroot.Groups, isSystem),
+				UserList: []string{user.Name},
+			})
+			sysroot.Groups = append(sysroot.Groups, group)
+			gid = group.GID
+		}
+		return common.Get(user.UID, getNextUID(sysroot.Users, isSystem)), gid
+	}
+}
+
+func determineGecos(user User) string {
+	if user.Name == "root" && user.Gecos == nil {
+		return "Super User"
+	}
+	return common.Get(user.Gecos, "")
 }
 
 // Users could feeds:
@@ -299,62 +360,20 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			continue
 		}
 
-		home := ""  // Will set the default when `NewUser()`
-		shell := "" // Will set the default when `NewUser()`
-		isSystem := common.Get(user.System, false)
-
-		// Set the home and shell values depending of user.{Name,System}.
-		if user.Name == "root" {
-			// Just for the root user.
-			home = "/root"
-			shell = "/usr/bin/sh"
-			if user.UID == nil {
-				user.UID = pointy.Int(0)
-			}
-			if user.GID == nil {
-				user.GID = pointy.Int(0)
-			}
-		} else if !isSystem {
-			// Normal user.
-			home = fmt.Sprintf("/home/%s", user.Name)
-			shell = "/usr/bin/sh"
-		} else {
-			// System user.
-			home = "/"
-			shell = "/usr/sbin/nologin"
-		}
-
-		uid := common.Get(user.UID, getNextUID(sysroot.Users, isSystem))
-		gid := common.Get(user.GID, -1)
-
-		// user.GID is nil, try to find a group with the same user.Name.
-		if gid == -1 {
-			gid = common.Get(getGIDByName(sysroot.Groups, user.Name), -1)
-		}
-
-		// Create a new group if there are not groups with the same user.Name
-		// or user.GID.
-		if gid == -1 {
-			passwdGroup := passwd.NewGroup(passwd.Group{
-				Name:     user.Name,
-				Password: "",
-				GID:      getNextGID(sysroot.Groups, isSystem),
-				UserList: []string{user.Name},
-			})
-			sysroot.Groups = append(sysroot.Groups, passwdGroup)
-			gid = passwdGroup.GID
-		}
+		home, shell := determineHomeAndShell(user)
+		uid, gid := determineUIDGID(sysroot, user)
+		gecos := determineGecos(user)
 
 		// Add or update user to sysroot.Users.
-		passwdUser := passwd.NewUser(passwd.User{
+		sysroot.Users = common.UpdateOrAppend(sysroot.Users, passwd.NewUser(passwd.User{
 			Name:     user.Name,
 			Password: "x",
 			UID:      uid,
 			GID:      gid,
+			Gecos:    gecos,
 			Home:     home,
 			Shell:    shell,
-		})
-		sysroot.Users = common.UpdateOrAppend(sysroot.Users, passwdUser, func(a, b passwd.User) bool {
+		}), func(a, b passwd.User) bool {
 			return a.Name == b.Name
 		})
 
@@ -369,25 +388,33 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			})
 		}
 
-		// Update groups instances.
-		for _, groupName := range user.Groups {
+		// Include own user name as group.
+		userGroups := common.UpdateOrAppend(user.Groups, user.Name, func(a, b string) bool {
+			return a == b
+		})
+
+		// Update groups instances user list.
+		for _, groupName := range userGroups {
 			i := slices.IndexFunc(sysroot.Groups, func(group passwd.Group) bool {
 				return group.Name == groupName
 			})
-
-			if i >= 0 {
-				// Try to update an already defined group.
-				sysroot.Groups[i].UserList = append(sysroot.Groups[i].UserList, passwdUser.Name)
-			} else {
-				// Create a new group.
-				sysroot.Groups = append(sysroot.Groups, passwd.Group{
-					Name:     groupName,
-					Password: "",
-					GID:      getNextGID(sysroot.Groups, isSystem),
-					UserList: []string{passwdUser.Name},
-				})
+			if i < 0 {
+				return fmt.Errorf("cannot find group %s", groupName)
 			}
+			// Try to update an already defined group.
+			sysroot.Groups[i].UserList = append(sysroot.Groups[i].UserList, user.Name)
 		}
+
+		// Create home directory.
+		sysroot.Directories = common.UpdateOrAppend(sysroot.Directories, sr.Directory{
+			Overwrite: false,
+			Path:      home,
+			Mode:      0o750,
+			UID:       uid,
+			GID:       gid,
+		}, func(a, b sr.Directory) bool {
+			return a.Path == b.Path
+		})
 
 		// Set the SSH Authorized keys.
 		if len(user.SSHAuthorizedKeys) > 0 {
@@ -397,20 +424,24 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			}
 
 			if len(content) > 0 {
-				sysroot.Directories = append(sysroot.Directories, sr.Directory{
+				sysroot.Directories = common.UpdateOrAppend(sysroot.Directories, sr.Directory{
 					Overwrite: false,
 					Path:      home + "/.ssh",
 					Mode:      0o700,
 					UID:       uid,
 					GID:       gid,
+				}, func(a, b sr.Directory) bool {
+					return a.Path == b.Path
 				})
-				sysroot.Files = append(sysroot.Files, sr.File{
+				sysroot.Files = common.UpdateOrAppend(sysroot.Files, sr.File{
 					Overwrite: false,
 					Filename:  home + "/.ssh/authorized_keys",
 					Content:   content,
 					Mode:      0o600,
 					UID:       uid,
 					GID:       gid,
+				}, func(a, b sr.File) bool {
+					return a.Filename == b.Filename
 				})
 			}
 		}
@@ -563,6 +594,21 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 	return nil
 }
 
+func resolveFlags(opts []string) (mount.MountFlag, string) {
+	var flags mount.MountFlag
+	data := []string{}
+
+	for _, opt := range opts {
+		if f, ok := mount.MountFlags[opt]; ok {
+			flags |= f
+		} else {
+			data = append(data, opt)
+		}
+	}
+
+	return flags, strings.Join(data, ",")
+}
+
 func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
@@ -575,13 +621,16 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 	}
 
 	for _, m := range config.Storage.Mounts {
-		sysroot.Mounts = common.UpdateOrAppend(sysroot.Mounts, sr.Mount{
-			What:    m.What,
-			Where:   m.Where,
-			Type:    common.Get(m.Type, ""),
-			Options: common.Get(m.Options, ""),
-		}, func(a, b sr.Mount) bool {
-			return a.Where == b.Where
+		flags, data := resolveFlags(strings.Split(common.Get(m.Options, ""), ","))
+		sysroot.Mounts = common.UpdateOrAppend(sysroot.Mounts, mount.MountPoint{
+			Target: m.Where,
+			Chmod:  0o755,
+			Source: m.What,
+			Fstype: common.Get(m.Type, ""),
+			Flags:  flags,
+			Data:   data,
+		}, func(a, b mount.MountPoint) bool {
+			return a.Target == b.Target
 		})
 	}
 

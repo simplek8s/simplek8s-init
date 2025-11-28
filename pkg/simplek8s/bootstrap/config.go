@@ -18,6 +18,7 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -27,8 +28,10 @@ import (
 	"simplek8s/pkg/common"
 	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/sysfs"
+	"simplek8s/pkg/simplek8s/udev"
 
 	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/goccy/go-yaml"
 	log "github.com/sirupsen/logrus"
@@ -54,6 +57,7 @@ type User struct {
 	DeprecatedSSHAuthorizedKeys []string `yaml:"sshAuthorizedKeys,omitempty"` // Deprecated: use SSHAuthorizedKeys
 	Groups                      []string `yaml:",omitempty"`
 	System                      *bool    `yaml:",omitempty"`
+	Gecos                       *string  `yaml:",omitempty"`
 }
 type Mount struct {
 	What    string   `yaml:""`
@@ -101,13 +105,61 @@ func (c *Config) String() string {
 	return string(j)
 }
 
-// Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
-func getYamlContent(blockDevices []string) ([]byte, error) {
-	log.WithFields(log.Fields{
-		"blockDevices": blockDevices,
-	}).Trace("start")
-	defer log.Trace("end")
+func scanDirectoryForYaml(fs filesystem.FileSystem, path string) (string, []byte, error) {
+	rSimpleK8sYaml := regexp.MustCompile("^simplek8s.ya?ml$")
 
+	fis, err := fs.ReadDir(path)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"readDirErr": err,
+			"path":       path,
+		}).Debug("skipping")
+		return "", nil, err
+	}
+
+	for _, fi := range fis {
+		filename := fi.Name()
+		fullFilename := filepath.Join(path, filename)
+		isDir := fi.IsDir()
+		rMath := rSimpleK8sYaml.MatchString(filename)
+		log.WithFields(log.Fields{
+			"fullFilename": fullFilename,
+			"isDir":        isDir,
+			"rMath":        rMath,
+		}).Debug()
+
+		if isDir || !rMath {
+			log.WithFields(log.Fields{
+				"fullFilename": fullFilename,
+				"filename":     filename,
+			}).Debug("skipping")
+			continue
+		}
+
+		file, err := fs.OpenFile(fullFilename, os.O_RDONLY)
+		if err != nil {
+			log.WithField("openFileErr", err).Warn()
+			continue
+		}
+		defer file.Close()
+
+		b, err := io.ReadAll(file)
+		if err != nil {
+			log.WithField("readAllErr", err).Warn()
+			continue
+		}
+
+		// Trim NUL chars
+		b = bytes.Trim(b, "\x00")
+		log.WithField("readAll", string(b)).Debug()
+
+		return fullFilename, b, nil
+	}
+
+	return "", nil, nil
+}
+
+func scanPartitionForYaml(disk *disk.Disk, partitionIndex int) (string, []byte, error) {
 	directories := []string{
 		"/",
 		"/simplek8s/",
@@ -119,113 +171,88 @@ func getYamlContent(blockDevices []string) ([]byte, error) {
 		"/boot/EFI/simplek8s/",
 	}
 
-	rSimpleK8sYaml := regexp.MustCompile("^simplek8s.ya?ml$")
+	fs, err := disk.GetFilesystem(partitionIndex)
+	if err != nil {
+		log.Debug("fs err", err)
+		return "", nil, err
+	}
+
+	if fs.Type() != filesystem.TypeFat32 {
+		log.WithField("partitionIndex", partitionIndex).Debug("skipping")
+		return "", nil, err
+	}
+
+	// Search first simplek8s.yaml file
+	for _, path := range directories {
+		if fullFilename, b, err := scanDirectoryForYaml(fs, path); b != nil {
+			return fullFilename, b, err
+		}
+	}
+
+	return "", nil, nil
+}
+
+func scanDeviceForYaml(device string) (int, string, []byte, error) {
+	disk, err := diskfs.Open(device, diskfs.WithOpenMode(diskfs.ReadOnly))
+	if err != nil {
+		log.WithField("diskErr", err).Debug()
+		return 0, "", nil, err
+	}
+
+	nPartitions := 0
+	if pt, err := disk.GetPartitionTable(); err != nil {
+		// Maybe the block device has not partition table because the filesystem
+		// is on the entire block device. Ex: `blockDevices = ["/dev/vda1"]`.
+		log.WithField("partitionTableErr", err).Debug()
+	} else {
+		nPartitions = len(pt.GetPartitions())
+	}
+
+	for partitionIndex := 0; partitionIndex <= nPartitions; partitionIndex++ {
+		log.WithField("partitionIndex", partitionIndex).Debug()
+
+		if fullFilename, b, err := scanPartitionForYaml(disk, partitionIndex); b != nil {
+			return partitionIndex, fullFilename, b, err
+		}
+	}
+
+	return 0, "", nil, nil
+}
+
+// Could returns `nil, nil` if it can't find any `simplek8s.yaml` file.
+func getYamlContent(blockDevices []string) (string, []byte, error) {
+	log.WithFields(log.Fields{
+		"blockDevices": blockDevices,
+	}).Trace("start")
+	defer log.Trace("end")
 
 	if len(blockDevices) == 0 {
-		return nil, nil
+		return "", nil, nil
 	}
 
 	// diskfs requires "/dev" to open raw devices.
 	if !common.IsPathExists(blockDevices[0]) {
 		err := mount.Mount(mount.Mountpoints.Dev)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		defer mount.Unmount(mount.Mountpoints.Dev.Target, 0)
 	}
 
-	for _, blockDevice := range blockDevices {
-		log.WithField("device", blockDevice).Debug()
+	for _, device := range blockDevices {
+		log.WithField("device", device).Debug()
 
-		disk, err := diskfs.Open(blockDevice, diskfs.WithOpenMode(diskfs.ReadOnly))
-		if err != nil {
-			log.WithField("diskErr", err).Debug()
-			continue
-		}
-
-		nPartitions := 0
-		if pt, err := disk.GetPartitionTable(); err != nil {
-			// Maybe the block device has not partition table because the filesystem
-			// is on the entire block device. Ex: `blockDevices = ["/dev/vda1"]`.
-			log.WithField("partitionTableErr", err).Debug()
-		} else {
-			nPartitions = len(pt.GetPartitions())
-		}
-
-		for partitionIndex := 0; partitionIndex <= nPartitions; partitionIndex++ {
-			log.WithField("partitionIndex", partitionIndex).Debug()
-
-			fs, err := disk.GetFilesystem(partitionIndex)
-			if err != nil {
-				log.Debug("fs err", err)
-				continue
-			}
-
-			if fs.Type() != filesystem.TypeFat32 {
-				log.WithField("partitionIndex", partitionIndex).Debug("skipping")
-				continue
-			}
-
-			// Search first simplek8s.yaml file
-			for _, path := range directories {
-
-				fis, err := fs.ReadDir(path)
-				if err != nil {
-					log.WithFields(log.Fields{
-						"readDirErr": err,
-						"path":       path,
-					}).Debug("skipping")
-					continue
-				}
-
-				for _, fi := range fis {
-					filename := fi.Name()
-					fullFilename := filepath.Join(path, filename)
-					isDir := fi.IsDir()
-					rMath := rSimpleK8sYaml.MatchString(filename)
-					log.WithFields(log.Fields{
-						"fullFilename": fullFilename,
-						"isDir":        isDir,
-						"rMath":        rMath,
-					}).Debug()
-
-					if isDir || !rMath {
-						log.WithFields(log.Fields{
-							"fullFilename": fullFilename,
-							"filename":     filename,
-						}).Debug("skipping")
-						continue
-					}
-
-					log.WithFields(log.Fields{
-						"blockDevice":    blockDevice,
-						"partitionIndex": partitionIndex,
-						"fullFilename":   fullFilename,
-					}).Info("simplek8s yaml found")
-
-					file, err := fs.OpenFile(fullFilename, os.O_RDONLY)
-					if err != nil {
-						log.WithField("openFileErr", err).Warn()
-						continue
-					}
-					defer file.Close()
-
-					b, err := io.ReadAll(file)
-					if err != nil {
-						log.WithField("readAllErr", err).Warn()
-						continue
-					}
-
-					// Trim NUL chars
-					b = bytes.Trim(b, "\x00")
-					log.WithField("readAll", string(b)).Debug()
-
-					return b, nil
-				}
-			}
+		if partitionIndex, fullFilename, b, err := scanDeviceForYaml(device); b != nil {
+			log.WithFields(log.Fields{
+				"device":         device,
+				"partitionIndex": partitionIndex,
+				"fullFilename":   fullFilename,
+			}).Info("simplek8s yaml found")
+			where := fmt.Sprintf("%s p%d %s", device, partitionIndex, fullFilename)
+			return where, b, err
 		}
 	}
-	return nil, nil
+	return "", nil, nil
 }
 
 func unmarshal(yamlContent []byte) (*Config, error) {
@@ -256,23 +283,29 @@ func unmarshal(yamlContent []byte) (*Config, error) {
 
 // This function will stay finding for block devices until `ctx`
 // context is cancelled or `simplek8s.yaml` file is found and read.
-func getFromBlockDevices(ctx context.Context) ([]byte, error) {
+func getFromBlockDevices(ctx context.Context) (string, []byte, error) {
 	log.Trace("start")
 	defer log.Trace("end")
+
+	// Ensure that /dev is populated by udev.
+	// This step is required to search virtio disks.
+	if err := udev.PopulateDev(); err != nil {
+		return "", nil, fmt.Errorf("cannot populate /dev by udev: %w", err)
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			// Context was canceled or deadline exceeded.
 			log.Debug(ctx.Err())
-			return nil, nil
+			return "", nil, nil
 
 		default:
 			// Get all block devices.
 			blockDevices, err := sysfs.GetBlockDevices()
 			if err != nil {
 				log.Error(err)
-				return nil, err
+				return "", nil, err
 			}
 
 			// TODO: Add support for cmdline blockdev=<device>.
@@ -290,10 +323,10 @@ func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 			}
 
 			// Search for `simplek8s.yaml` content across all block devices.
-			data, err := getYamlContent(blockDevices)
+			where, data, err := getYamlContent(blockDevices)
 			if err != nil {
 				log.Error(err)
-				return nil, err
+				return "", nil, err
 			}
 			if data == nil {
 				// File not found, try again later.
@@ -302,13 +335,13 @@ func getFromBlockDevices(ctx context.Context) ([]byte, error) {
 			}
 
 			// File found.
-			return data, nil
+			return where, data, nil
 		}
 	}
 }
 
 // GetConfig retrieves SimpleK8s Config.
-func GetConfig(timeout time.Duration) (*Config, error) {
+func GetConfig(timeout time.Duration) (string, *Config, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -316,7 +349,7 @@ func GetConfig(timeout time.Duration) (*Config, error) {
 	case <-ctx.Done():
 		// Context was canceled or deadline exceeded.
 		log.Debug(ctx.Err())
-		return nil, nil
+		return "", nil, nil
 
 	default:
 		// TODO: Fetch from URLs (static and kernel args):
@@ -324,12 +357,13 @@ func GetConfig(timeout time.Duration) (*Config, error) {
 		// 		 http://169.254.169.254/latest/user-data
 		//		 https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html
 
-		if data, err := getFromBlockDevices(ctx); err != nil {
+		if where, data, err := getFromBlockDevices(ctx); err != nil {
 			log.Error(err)
-			return nil, err
+			return "", nil, err
 		} else if data != nil {
-			return unmarshal(data)
+			config, err := unmarshal(data)
+			return where, config, err
 		}
-		return nil, nil
+		return "", nil, nil
 	}
 }

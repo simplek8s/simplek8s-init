@@ -21,12 +21,13 @@ import (
 	"runtime"
 
 	l "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 
 	"simplek8s/pkg/log"
 	"simplek8s/pkg/simplek8s"
 
+	"simplek8s/internal/pkg/cmd/mkpasswd"
 	"simplek8s/internal/pkg/cmd/simpleinit"
+	"simplek8s/internal/pkg/cmd/switchroot"
 	"simplek8s/internal/pkg/cmd/wizard"
 )
 
@@ -39,6 +40,8 @@ var cmds = []struct {
 }{
 	{"init", simpleinit.CmdFn, simpleinit.CmdHelp},
 	{"wizard", wizard.CmdFn, wizard.CmdHelp},
+	{"mkpasswd", mkpasswd.CmdFn, mkpasswd.CmdHelp},
+	{"switchroot", switchroot.CmdFn, switchroot.CmdHelp},
 }
 
 func help() error {
@@ -80,7 +83,7 @@ func fetchCmd() string {
 	return ""
 }
 
-func main() {
+func initLog() {
 	if simplek8s.IsDebug() {
 		log.Level = log.LevelDebug
 
@@ -90,6 +93,10 @@ func main() {
 			DisableTimestamp: true,
 		})
 	}
+}
+
+func main() {
+	initLog()
 
 	log.Trace("start")
 	defer log.Trace("end")
@@ -125,11 +132,6 @@ func main() {
 			return msg
 		})
 		log.Error(err.Error())
-
-		if simplek8s.IsDebug() {
-			fmt.Printf("Debug is true, dropping to a shell instead of crash.\n\n")
-			unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
-		}
 
 		os.Exit(1)
 	}

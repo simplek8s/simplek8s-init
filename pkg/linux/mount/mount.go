@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"simplek8s/pkg/common"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -55,7 +56,7 @@ const (
 	MountFlagStrictATime = unix.MS_STRICTATIME              // Always updates access time.
 	MountFlagNoDirATime  = unix.MS_NODIRATIME               // Do not update directory access time.
 	MountFlagBind        = unix.MS_BIND                     // Mount a folder somewhere else.
-	MountFlagRBind       = unix.MS_BIND | unix.MS_REC       // Recursive bind.
+	MountFlagRBind       = unix.MS_BIND | unix.MS_REC       // Recursive mount a folder somewhere else.
 	MountFlagRec         = unix.MS_REC                      // Recursive mount (used with bind).
 	MountFlagPrivate     = unix.MS_PRIVATE                  // Mount propagation private.
 	MountFlagRPrivate    = unix.MS_PRIVATE | unix.MS_REC    // Recursive mount propagation private.
@@ -139,20 +140,26 @@ var Mountpoints = struct {
 	Run     MountPoint
 	Usr     MountPoint
 }{
-	Sysroot: MountPoint{"/", 0o755, "none", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
-	Dev:     MountPoint{"/dev", 0o755, "none", "devtmpfs", MountFlagNoSUID | MountFlagStrictATime, ""},
-	Sys:     MountPoint{"/sys", 0o555, "none", "sysfs", 0, ""},
-	Proc:    MountPoint{"/proc", 0o555, "none", "proc", 0, ""},
-	Run:     MountPoint{"/run", 0o755, "none", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
-	Usr:     MountPoint{"/usr", 0o755, "none", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
+	Sysroot: MountPoint{"/", 0o755, "tmpfs", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
+	Dev:     MountPoint{"/dev", 0o755, "devtmpfs", "devtmpfs", MountFlagNoSUID | MountFlagStrictATime, ""},
+	Sys:     MountPoint{"/sys", 0o555, "sysfs", "sysfs", 0, ""},
+	Proc:    MountPoint{"/proc", 0o555, "proc", "proc", 0, ""},
+	Run:     MountPoint{"/run", 0o755, "tmpfs", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
+	Usr:     MountPoint{"/usr", 0o755, "tmpfs", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
 }
 
 func blkidType(dev string) (string, error) {
+	// blkid command requires /dev/null.
+	if !common.IsPathExists("/dev/null") {
+		Mount(Mountpoints.Dev)
+		defer Unmount(Mountpoints.Dev.Target, 0)
+	}
+
 	cmd := "/usr/sbin/blkid"
 	args := []string{"-o", "value", "-s", "TYPE", dev}
 	out, err := exec.Command(cmd, args...).Output()
 	if err != nil {
-		return "", fmt.Errorf("error executing: %s %s: %w", cmd, strings.Join(args, " "), err)
+		return "", fmt.Errorf("error running: %s %s: %w", cmd, strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }

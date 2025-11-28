@@ -12,26 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package simpleinit bootstrap from (initrd) root to the next (systemd) root.
-package simpleinit
+package switchroot
 
 import (
 	"fmt"
 	"os"
-
+	"simplek8s/internal/pkg/cmd/simpleinit"
 	"simplek8s/pkg/log"
-	"simplek8s/pkg/simplek8s"
 )
 
-const CmdHelp = "Bootstrap from (initrd) root to the next (systemd) root."
+const CmdHelp = "Switch root filesystem to the next one."
 
-// CmdFn will:
-//   - Verifies that the process is PID 1.
-//   - Prepares the next root filesystem and switches to it.
-//   - Exits cleanly.
+// CmdFn will switch rootfs by /sysroot and execute init in it.
 func CmdFn() error {
-	logToDevKmsg()
-
 	log.Trace("start")
 	defer log.Trace("end")
 
@@ -42,12 +35,5 @@ func CmdFn() error {
 	}
 
 	where := "/sysroot"
-	err := bootNextRoot(where)
-
-	// We are PID1, so we can't crash when DEBUG is set.
-	if err != nil && simplek8s.IsDebug() {
-		return dropToShell(where, "Debug is true, dropping to a shell instead of crash.")
-	}
-
-	return err
+	return simpleinit.SwitchRoot(where)
 }

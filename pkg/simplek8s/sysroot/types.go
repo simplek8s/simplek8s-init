@@ -18,15 +18,9 @@ import (
 	"encoding/json"
 	"io/fs"
 
+	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/passwd"
 )
-
-type Mount struct {
-	What    string
-	Where   string
-	Type    string
-	Options string
-}
 
 type Link struct {
 	Overwrite bool
@@ -58,7 +52,7 @@ type Sysroot struct {
 	Shadows     []passwd.Shadow
 	Groups      []passwd.Group
 	Users       []passwd.User
-	Mounts      []Mount
+	Mounts      []mount.MountPoint
 	Links       []Link
 	Directories []Directory
 	Files       []File

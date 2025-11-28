@@ -16,7 +16,6 @@
 package simpleinit
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,15 +23,14 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"simplek8s/pkg/common"
 	"simplek8s/pkg/cp"
 	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/procfs"
 	"simplek8s/pkg/log"
 	"simplek8s/pkg/simplek8s"
 	"simplek8s/pkg/simplek8s/bootstrap"
-	"simplek8s/pkg/simplek8s/generateshadow"
 	"simplek8s/pkg/simplek8s/sysroot"
+	"simplek8s/pkg/simplek8s/sysroot/writer/systemd"
 )
 
 // createUsr mounts tmpfs into `where` (normally `/sysroot/usr`), populates it
@@ -142,50 +140,66 @@ func createSysroot(where string) error {
 		// 	UID:       0,
 		// 	GID:       0,
 		// }},
-		Mounts: []sysroot.Mount{
+		Mounts: []mount.MountPoint{
 			// Persist into /var.
 			{
-				What:    "none",
-				Where:   "/var",
-				Type:    "tmpfs",
-				Options: "size=90%",
+				Target: "/var",
+				Chmod:  0o755,
+				Source: "tmpfs",
+				Fstype: "tmpfs",
+				Flags:  0,
+				Data:   "size=90%",
 			},
 			// Binds from /var.
 			{
-				What:    "/var/etc",
-				Where:   "/etc",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/etc",
+				Chmod:  0o755,
+				Source: "/var/etc",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			}, {
-				What:    "/var/home",
-				Where:   "/home",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/home",
+				Chmod:  0o755,
+				Source: "/var/home",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			}, {
-				What:    "/var/mnt",
-				Where:   "/mnt",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/mnt",
+				Chmod:  0o755,
+				Source: "/var/mnt",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			}, {
-				What:    "/var/opt",
-				Where:   "/opt",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/opt",
+				Chmod:  0o755,
+				Source: "/var/opt",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			}, {
-				What:    "/var/root",
-				Where:   "/root",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/root",
+				Chmod:  0o755,
+				Source: "/var/root",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			}, {
-				What:    "/var/usr/libexec/kubernetes",
-				Where:   "/usr/libexec/kubernetes",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/usr/libexec/kubernetes",
+				Chmod:  0o755,
+				Source: "/var/usr/libexec/kubernetes",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			}, {
-				What:    "/var/usr/local",
-				Where:   "/usr/local",
-				Type:    "none",
-				Options: "rbind",
+				Target: "/usr/local",
+				Chmod:  0o755,
+				Source: "/var/usr/local",
+				Fstype: "none",
+				Flags:  mount.MountFlagRBind,
+				Data:   "",
 			},
 		},
 	}
@@ -197,87 +211,85 @@ func createSysroot(where string) error {
 	fmt.Printf("Fetching simplek8s.yaml... (%ds)\n", timeout)
 
 	// Retrive SimpleK8s bootstrap config.
-	config, err := bootstrap.GetConfig(time.Duration(timeout) * time.Second)
+	cfgPath, config, err := bootstrap.GetConfig(time.Duration(timeout) * time.Second)
 	if err != nil {
 		log.Warnf("cannot fetch bootstrap config: %v", err)
 	} else if config != nil {
-		log.DebugFn(func() string { return fmt.Sprintf("simplek8s.yaml:\n```yaml\n%s\n```", config.String()) })
+		fmt.Printf("Found simplek8s.yaml at: %s\n", cfgPath)
+		log.DebugFn(func() string { return fmt.Sprintf("```yaml\n%s\n```", config.String()) })
 
 		if err := bootstrap.FeedSysrootByBootstrapConfig(sr, *config); err != nil {
 			return fmt.Errorf("cannot feed sysroot by bootstrap config: %w", err)
 		}
 	} else {
-		// There is not bootstrap config.
-
-		// Generate root password.
-		plain, hash, err := generateshadow.GeneratePwd("root")
-		if err != nil {
-			return fmt.Errorf("can not generate root pwd: %w", err)
-		}
-		for _, f := range []sysroot.File{{
-			Overwrite: true,
-			Filename:  "/run/credstore/passwd.hashed-password.root",
-			Content:   []byte(hash),
-			Mode:      0o400,
-			UID:       0,
-			GID:       0,
-		}, {
-			Overwrite: true,
-			Filename:  "/run/issue.d/80-root-random-password.issue",
-			Content:   fmt.Appendf(nil, "\n\\e{red}You are running a non persistent session!\\e{reset}\n  Root pwd: %s\n", plain),
-			Mode:      0o644,
-			UID:       0,
-			GID:       0,
-		}} {
-			sr.Files = common.UpdateOrAppend(sr.Files, f, func(a sysroot.File, b sysroot.File) bool {
-				return a.Filename == b.Filename
-			})
-		}
+		fmt.Println("simplek8s.yaml not found. Booting a non persistent session...")
 	}
 
 	if simplek8s.IsDebug() {
 		fmt.Println("sysroot:\n```json\n" + sr.String() + "\n```")
 	}
 
-	if err := sr.Write(where); err != nil {
+	if err := systemd.Write(sr, where); err != nil {
 		return fmt.Errorf("cannot write sysroot config: %w", err)
+	}
+
+	// Move pseudo filesystems mountpoints from initrd to sysroot.
+	for _, s := range []string{
+		mount.Mountpoints.Dev.Target,
+		mount.Mountpoints.Proc.Target,
+		mount.Mountpoints.Sys.Target,
+	} {
+		mp := mount.MountPoint{
+			Target: filepath.Join(where, s),
+			Chmod:  0o755,
+			Source: s,
+			Fstype: "none",
+			Flags:  mount.MountFlagMove,
+		}
+		if err := mount.Mount(mp); err != nil {
+			return fmt.Errorf("cannot mount %s at %s: %w", mp.Source, mp.Target, err)
+		}
 	}
 
 	return nil
 }
 
 // Switch over to the next root and exec to the next init.
-func switchRoot(where string) error {
+func SwitchRoot(where string) error {
 	log.Trace("start")
 	defer log.Trace("end")
 
-	// unix.Mount(newroot, "/", "", unix.MS_MOVE, "")
-
-	if simplek8s.IsDebug() {
-		fmt.Printf("Debug is true, dropping to a shell ...\nExecute `\033[1mexec chroot /sysroot /sbin/init\033[0m` to continue the boot sequence.\n\n")
-		unix.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ())
-	}
-
-	// Enter chroot.
-	if err := unix.Chroot(where); err != nil {
-		return fmt.Errorf("cannot chroot into %s: %w", where, err)
-	}
-
-	// Change working directory into chroot.
-	if err := os.Chdir("/"); err != nil {
+	// Change workdir to sysroot.
+	if err := os.Chdir(where); err != nil {
 		return fmt.Errorf("cannot chdir to %s: %w", where, err)
 	}
 
-	// Execute next init.
-	for _, init := range []string{"/sbin/init"} {
-		if _, err := os.Stat(init); errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-
-		if err := unix.Exec(init, []string{init}, os.Environ()); err != nil {
-			return fmt.Errorf("cannot exec %s: %w", init, err)
-		}
+	// Replace rootfs by sysroot.
+	if err := mount.Mount(mount.MountPoint{
+		Target: "/",
+		Chmod:  0o755,
+		Source: where,
+		Fstype: "none",
+		Flags:  mount.MountFlagMove,
+	}); err != nil {
+		return fmt.Errorf("cannot replace rootfs by %s: %w", where, err)
 	}
 
-	return nil
+	// Change process rootfs.
+	if err := unix.Chroot("."); err != nil {
+		return fmt.Errorf("cannot chroot to %s: %w", where, err)
+	}
+
+	// Change-back to the new rootfs (sysroot).
+	if err := os.Chdir("/"); err != nil {
+		return fmt.Errorf("cannot chdir to / after chroot: %w", err)
+	}
+
+	// Execute next init.
+	init := "/sbin/init"
+	if err := unix.Exec(init, []string{init}, os.Environ()); err != nil {
+		return fmt.Errorf("cannot exec %s: %w", init, err)
+	}
+
+	return fmt.Errorf("unexpected exit from exec %s", init)
 }

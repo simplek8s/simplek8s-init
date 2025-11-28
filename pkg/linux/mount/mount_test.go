@@ -68,7 +68,7 @@ func TestMount_TableDriven(t *testing.T) {
 			m := MountPoint{
 				Target: target,
 				Chmod:  0755,
-				Source: "none",
+				Source: "tmpfs",
 				Fstype: "tmpfs",
 				Flags:  MountFlagNoSUID,
 				Data:   "",

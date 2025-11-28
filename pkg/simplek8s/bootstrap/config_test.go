@@ -211,10 +211,10 @@ func Test_getYamlContent(t *testing.T) {
 	}
 
 	// Test yaml content
-	if yaml, err := getYamlContent([]string{diskFilename}); err != nil {
+	if where, yaml, err := getYamlContent([]string{diskFilename}); err != nil {
 		t.Error(err)
 	} else if yaml != nil {
-		t.Log(yaml)
+		t.Log(where, yaml)
 	} else {
 		t.Fatal("yaml content is empty")
 	}

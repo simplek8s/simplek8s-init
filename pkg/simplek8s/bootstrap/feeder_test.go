@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/passwd"
 	"simplek8s/pkg/simplek8s/bootstrap"
 	sr "simplek8s/pkg/simplek8s/sysroot"
@@ -44,11 +45,13 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 					"users",
 				},
 				System: pointy.Bool(false),
+				Gecos:  pointy.String("Super User"),
 			},
 			{
 				Name: "rpi",
 				Groups: []string{
 					"users",
+					"dev_user",
 				},
 			},
 		},
@@ -107,13 +110,17 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 				Name:     "rpi",
 				Password: "",
 				GID:      1000,
-				UserList: []string{"rpi"},
+				UserList: []string{
+					"rpi",
+				},
 			},
 			{
 				Name:     "dev_user",
 				Password: "",
 				GID:      1001,
-				UserList: []string{},
+				UserList: []string{
+					"rpi",
+				},
 			},
 		},
 		Users: []passwd.User{
@@ -122,7 +129,7 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 				Password: "x",
 				UID:      0,
 				GID:      0,
-				Gecos:    nil,
+				Gecos:    "Super User",
 				Home:     "/root",
 				Shell:    "/usr/bin/sh",
 			},
@@ -131,33 +138,51 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 				Password: "x",
 				UID:      1000,
 				GID:      1000,
-				Gecos:    nil,
+				Gecos:    "",
 				Home:     "/home/rpi",
 				Shell:    "/usr/bin/sh",
 			},
 		},
-		Mounts: []sr.Mount{
+		Mounts: []mount.MountPoint{
 			{
-				What:    "/dev/disk/by-label/var",
-				Where:   "/var",
-				Type:    "ext4",
-				Options: "rw,relatime,discard",
+				Target: "/var",
+				Chmod:  0o755,
+				Source: "/dev/disk/by-label/var",
+				Fstype: "ext4",
+				Flags:  mount.MountFlagReadWrite | mount.MountFlagRelATime,
+				Data:   "discard",
 			},
 			{
-				What:    "/dev/disk/by-label/etc",
-				Where:   "/etc",
-				Type:    "",
-				Options: "",
+				Target: "/etc",
+				Chmod:  0o755,
+				Source: "/dev/disk/by-label/etc",
+				Fstype: "",
+				Flags:  0,
+				Data:   "",
 			},
 		},
 		Links: nil,
 		Directories: []sr.Directory{
 			{
 				Overwrite: false,
+				Path:      "/root",
+				Mode:      0o750,
+				UID:       0,
+				GID:       0,
+			},
+			{
+				Overwrite: false,
 				Path:      "/root/.ssh",
 				Mode:      0o700,
 				UID:       0,
 				GID:       0,
+			},
+			{
+				Overwrite: false,
+				Path:      "/home/rpi",
+				Mode:      0o750,
+				UID:       1000,
+				GID:       1000,
 			},
 		},
 		Files: []sr.File{

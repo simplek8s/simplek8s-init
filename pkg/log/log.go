@@ -25,9 +25,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
 )
 
 // callerFrame returns file, line, and function name of the first frame outside
@@ -63,18 +60,6 @@ func callerFrame() (file string, line int, fnName string) {
 }
 
 var Output io.Writer = os.Stdout
-
-func init() {
-	if !common.IsPathExists("/dev/kmsg") {
-		mount.Mount(mount.Mountpoints.Dev)
-		defer mount.Unmount(mount.Mountpoints.Dev.Target, 0)
-	}
-
-	w, err := os.OpenFile("/dev/kmsg", os.O_WRONLY, 0o644)
-	if err == nil {
-		Output = w
-	}
-}
 
 // defaultFormat returns the log message formatted according to the output type.
 // If writing to the kernel log, it uses the kernel log format, otherwise stdout.
