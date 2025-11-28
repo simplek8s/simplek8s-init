@@ -101,6 +101,8 @@ func ForEachLineOfReader(r io.Reader, fn func(line string) error) error {
 
 // We can use a mock for it.
 var osLchown = os.Lchown
+var osSymlink = os.Symlink
+var osLink = os.Link
 
 func CreateSymlink(path string, target string, overwrite bool, uid int, gid int, hard bool) error {
 	log.WithFields(log.Fields{
@@ -134,9 +136,9 @@ func CreateSymlink(path string, target string, overwrite bool, uid int, gid int,
 	}
 
 	// Create hard or soft link.
-	fn := os.Symlink
+	fn := osSymlink
 	if hard {
-		fn = os.Link
+		fn = osLink
 	}
 	if err := fn(target, path); err != nil {
 		log.Debug(err)
