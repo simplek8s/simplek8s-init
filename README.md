@@ -1,35 +1,41 @@
 # simplek8s.yaml
 
-SimpleK8s-Init will configures and populates the initrd and sysroot boot stages.
+SimpleK8s-Init configures and populates the _initrd_ and _sysroot_ boot stages
+during early system initialization.
+The file `simplek8s.yaml` defines all users, groups, files, mounts, and other
+resources to be created in these stages.
 
 ## Configuration specifications
 
 The file `simplek8s.yaml` is a YAML document conforming to the following specification:
 
-> Italicized entries being optional.
+> All fields marked in italic are optional. Deprecated fields are struck through.
 
-- `version` (string): Currently must be `1`
+- `version` (string): Currently must be `1`.
 - _`users`_ (list of objects):
   - `name` (string): User name.
   - _`password_hash`_ (string): Default is "x".
-  - DEPRECATED: ~~_`passwordHash`_ (string): Default is "x".~~
+  - **Deprecated**: ~~_`passwordHash`_~~ (string): Default is "x".
   - _`ssh_authorized_keys`_ (list of string): Default is none.
-  - DEPRECATED: ~~_`sshAuthorizedKeys`_ (list of string): Default is none.~~
+  - **Deprecated**: ~~_`sshAuthorizedKeys`_~~ (list of string): Default is none.
   - _`uid`_ (int): Default is next unused uid.
   - _`gid`_ (int): Default is the same value of uid.
   - _`groups`_ (list of string): Default is none.
-  - _`system`_ (boolean): Default is false.
+  - _`system`_ (boolean): UID default value will be more or equal than 1000 if
+    it is false. Default is false.
+  - _`gecos`_ (string): User description. Default is empty.
 - _`groups`_ (list of objects):
   - `name` (string): Group name.
   - _`gid`_ (int): Group Id. Default is next unused gid.
-  - _`system`_ (boolean): Default is false.
+  - _`system`_ (boolean): GID default value will be more or equal than 1000 if
+    it is false. Default is false.
 - _`storage`_ (object):
   - _`mounts`_ (list of objects):
-    - `what` (string)
-    - `where` (string)
-    - _`type`_ (string): Default is "auto".
+    - `what` (string): Device or path.
+    - `where` (string): Target mount point path.
+    - _`type`_ (string): Filesystem type. Default is "auto".
     - _`options`_ (string): Default is "defaults".
-    - DEPRECATED: ~~_`after`_ (list of string):~~
+    - **Deprecated**: ~~_`after`_~~ (list of string):
   - _`links`_ (list of objects):
     - _`overwrite`_ (boolean): Default is false.
     - `path` (string)
@@ -54,10 +60,12 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
 
 ```yaml
 version: "1"
+
 users:
   - name: root
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOJHHXFdcBLMAviMAHgQvCuzpnLmzXxatIL6IUe7b6W salvador.joseluis@gmail.com
+
 storage:
   mounts:
     - what: /dev/disk/by-label/var
@@ -80,6 +88,7 @@ users:
     groups:
       - ops
     system: false
+    gecos: Super User
 
 groups:
   - name: ops
@@ -90,7 +99,7 @@ storage:
   mounts:
     - what: /dev/disk/by-label/var
       where: /var
-      type: "ext4"
+      type: ext4
       options: defaults
 
     - what: /var/home
@@ -129,10 +138,10 @@ storage:
       permissions: "0775"
 
   files:
-    - # A example file
+    - # An example file
       overwrite: false
       path: /root/somedir/somefile
-      encoding: b64
+      encoding: b64 # Base64-encoded content
       # `content` will be decoded as: Hello world
       content: SGVsbG8gd29ybGQK
       owner: root:root
@@ -168,5 +177,5 @@ storage:
 
 ## Roadmap
 
-- Fetch external file content from http or https.
-- Validate external file content by GPG.
+- Support fetching external file content over HTTP/HTTPS.
+- Add GPG signature verification for externally fetched content.
