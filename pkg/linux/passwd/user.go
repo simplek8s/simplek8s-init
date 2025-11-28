@@ -34,7 +34,7 @@ type User struct {
 	Password string
 	UID      int
 	GID      int
-	Gecos    []string
+	Gecos    string
 	Home     string
 	Shell    string
 }
@@ -65,7 +65,7 @@ func (user User) Marshal() (string, error) {
 
 	uid := fmt.Sprint(user.UID)
 	gid := fmt.Sprint(user.GID)
-	gecos := strings.Join(user.Gecos, ",")
+	gecos := user.Gecos
 
 	home := user.Home
 	if len(user.Home) == 0 {
@@ -102,7 +102,7 @@ func UnmarshalUser(entry string, user *User) error {
 			}
 			user.GID = valueAsInt
 		case 4:
-			user.Gecos = strings.Split(value, ",")
+			user.Gecos = value
 		case 5:
 			user.Home = value
 		case 6:
