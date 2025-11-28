@@ -73,11 +73,11 @@ func getNumberOfDaysFrom1970() int {
 //   - if password is empty, will be set as "!!"
 //   - if lastChanged is nil, will be set as current number of days from 1970.
 func NewShadow(shadow Shadow) Shadow {
-	if len(shadow.Name) == 0 {
+	if shadow.Name == "" {
 		panic("name is required")
 	}
 
-	if len(shadow.Password) == 0 {
+	if shadow.Password == "" {
 		shadow.Password = "!!"
 	}
 
@@ -89,125 +89,77 @@ func NewShadow(shadow Shadow) Shadow {
 	return shadow
 }
 
+func intPtrToString(p *int) string {
+	if p == nil {
+		return ""
+	}
+	return strconv.Itoa(*p)
+}
+
 func (shadow Shadow) Marshal() (string, error) {
-	name := shadow.Name
-	if len(shadow.Name) == 0 {
+	if shadow.Name == "" {
 		return "", errors.New("name is required")
 	}
 
-	password := shadow.Password
-
-	lastChanged := ""
-	if shadow.LastChanged != nil {
-		lastChanged = fmt.Sprint(*shadow.LastChanged)
+	fields := []string{
+		shadow.Name,
+		shadow.Password,
+		intPtrToString(shadow.LastChanged),
+		intPtrToString(shadow.Minimum),
+		intPtrToString(shadow.Maximum),
+		intPtrToString(shadow.Warn),
+		intPtrToString(shadow.Inactive),
+		intPtrToString(shadow.Expire),
+		intPtrToString(shadow.Reserved),
 	}
 
-	minimum := ""
-	if shadow.Minimum != nil {
-		minimum = fmt.Sprint(*shadow.Minimum)
-	}
+	return strings.Join(fields, ":"), nil
+}
 
-	maximum := ""
-	if shadow.Maximum != nil {
-		maximum = fmt.Sprint(*shadow.Maximum)
+func parseIntPtr(s string) (*int, error) {
+	if s == "" {
+		return nil, nil
 	}
-
-	warn := ""
-	if shadow.Warn != nil {
-		warn = fmt.Sprint(*shadow.Warn)
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return nil, err
 	}
-
-	inactive := ""
-	if shadow.Inactive != nil {
-		inactive = fmt.Sprint(*shadow.Inactive)
-	}
-
-	expire := ""
-	if shadow.Expire != nil {
-		expire = fmt.Sprint(*shadow.Expire)
-	}
-
-	reserved := ""
-	if shadow.Reserved != nil {
-		reserved = fmt.Sprint(*shadow.Reserved)
-	}
-
-	return strings.Join([]string{
-		name, password, lastChanged, minimum, maximum, warn, inactive, expire, reserved,
-	}, ":"), nil
+	return &v, nil
 }
 
 func UnmarshalShadow(entry string, shadow *Shadow) error {
 	tokens := strings.Split(entry, ":")
 
-	nFields := 9
-	if len(tokens) != nFields {
-		return fmt.Errorf("invalid number of fields in entry: %s, got: %d, want: %d", entry, len(tokens), nFields)
+	const numExpectedFields = 9
+	numFields := len(tokens)
+	if numFields != numExpectedFields {
+		return fmt.Errorf("invalid number of fields in entry: %s, got: %d, want: %d", entry, numFields, numExpectedFields)
 	}
 
-	for index, value := range tokens {
-		switch index {
-		case 0:
-			shadow.Name = value
-		case 1:
-			shadow.Password = value
+	shadow.Name = tokens[0]
+	shadow.Password = tokens[1]
+	for i := 2; i < numExpectedFields; i++ {
+		v, err := parseIntPtr(tokens[i])
+		if err != nil {
+			return err
+		}
+		switch i {
 		case 2:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.LastChanged = &valueAsInt
-			}
+			shadow.LastChanged = v
 		case 3:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.Minimum = &valueAsInt
-			}
+			shadow.Minimum = v
 		case 4:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.Maximum = &valueAsInt
-			}
+			shadow.Maximum = v
 		case 5:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.Warn = &valueAsInt
-			}
+			shadow.Warn = v
 		case 6:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.Inactive = &valueAsInt
-			}
+			shadow.Inactive = v
 		case 7:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.Expire = &valueAsInt
-			}
+			shadow.Expire = v
 		case 8:
-			if len(value) > 0 {
-				valueAsInt, err := strconv.Atoi(value)
-				if err != nil {
-					return err
-				}
-				shadow.Reserved = &valueAsInt
-			}
+			shadow.Reserved = v
 		}
 	}
+
 	return nil
 }
