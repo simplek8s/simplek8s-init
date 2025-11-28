@@ -18,7 +18,7 @@ URL = https://publisher.simplek8s.org/upload/simplek8s-init
 GPG_FINGERPRINT = 33BAAC4BFB20C2327429730A9F16C69F2B9DD678
 TAGS ?= dev
 
-export BUILD_VERSION:=$(shell date --utc +%Y%m%d%H%M%S)
+export BUILD_VERSION:=$(shell date --utc +%Y%m%d%H%M)
 
 NPROCS = $(shell grep -c 'processor' /proc/cpuinfo || printf 1)
 MAKEFLAGS += -j$(NPROCS)
