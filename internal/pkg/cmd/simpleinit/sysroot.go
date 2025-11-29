@@ -205,7 +205,11 @@ func createSysroot(where string) error {
 	}
 
 	// Get timeout from rootwait cmdline.
-	timeout, _ := procfs.GetCmdlineValue("rootwait", 10)
+	cmdline, err := procfs.GetCmdline()
+	if err != nil {
+		return fmt.Errorf("cannot read cmdline: %w", err)
+	}
+	timeout, _ := procfs.GetCmdlineValue(string(cmdline), "rootwait", 10)
 
 	// Show feedback to user about fetching simplek8s.yaml.
 	fmt.Printf("Fetching simplek8s.yaml... (%ds)\n", timeout)

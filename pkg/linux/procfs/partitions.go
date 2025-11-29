@@ -1,11 +1,22 @@
 // Copyright 2022 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package procfs
 
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -17,17 +28,23 @@ type Partitions struct {
 	Name   string // Name of the partition.
 }
 
-// Parse partitions from a file (normally /proc/partitions).
-// The file should contain lines in the format:
+// ParsePartitions parses the partitions information from /proc/partitions.
 //
-// major minor  #blocks  name
+//	var partitions string
 //
-//	259        0 1953514584 nvme0n1
-//	259        4 1953513472 nvme0n1p1
-func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
+// should be a multi-line string where each line should contain lines in the
+// format:
+//
+//	 major minor  #blocks  name
+//
+//		259        0 1953514584 nvme0n1
+//		259        4 1953513472 nvme0n1p1
+func ParsePartitions(partitions string) ([]Partitions, error) {
 	// Parse each line from file.
-	partitions := []Partitions{}
-	s := bufio.NewScanner(file)
+	parts := []Partitions{}
+
+	reader := strings.NewReader(partitions)
+	s := bufio.NewScanner(reader)
 	for i := 0; s.Scan(); i++ {
 		line := s.Text()
 
@@ -46,7 +63,7 @@ func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
 		// Parse each fields.
 		fields := strings.Fields(line)
 		if len(fields) != 4 {
-			return nil, fmt.Errorf("cannot parse line %q, from %q", line, file.Name())
+			return nil, fmt.Errorf("cannot parse line %d: %q", i+1, line)
 		}
 		major, err := strconv.ParseInt(fields[0], 10, 64)
 		if err != nil {
@@ -63,7 +80,7 @@ func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
 		name := fields[3]
 
 		// Append the parsed line as new struct.
-		partitions = append(partitions, Partitions{
+		parts = append(parts, Partitions{
 			Major:  major,
 			Minor:  minor,
 			Blocks: blocks,
@@ -71,5 +88,5 @@ func parsePartitionsFromFile(file *os.File) ([]Partitions, error) {
 		})
 	}
 
-	return partitions, nil
+	return parts, nil
 }

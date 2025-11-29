@@ -17,27 +17,34 @@ package simplek8s
 
 import (
 	"strconv"
+	"sync"
 
 	"simplek8s/pkg/common"
 	"simplek8s/pkg/linux/procfs"
 )
 
-var isDebug *bool
+var (
+	isDebug     bool
+	isDebugOnce sync.Once
+)
 
 func IsDebug() bool {
-	if isDebug != nil {
-		return *isDebug
-	}
+	isDebugOnce.Do(func() {
+		// Get debug from environment.
+		v, _ := strconv.ParseBool(common.GetEnv("DEBUG", "false"))
+		if v {
+			isDebug = true
+			return
+		}
 
-	// Get debug from environment.
-	v, _ := strconv.ParseBool(common.GetEnv("DEBUG", "false"))
-	if v {
-		isDebug = &v
-		return true
-	}
-
-	// Get debug value from "/proc/cmdline".
-	v, _ = procfs.GetCmdlineValue("debug", false)
-	isDebug = &v
-	return v
+		// Get debug value from "/proc/cmdline".
+		cmdline, err := procfs.GetCmdline()
+		if err != nil {
+			isDebug = false
+			return
+		}
+		v, _ = procfs.GetCmdlineValue(string(cmdline), "debug", false)
+		isDebug = v
+	})
+	return isDebug
 }

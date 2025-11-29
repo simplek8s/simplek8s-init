@@ -1,8 +1,21 @@
+// Copyright 2025 José Luis Salvador Rufo <salvador.joseluis@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package procfs
 
 import (
 	"bufio"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -25,9 +38,17 @@ func unescape(s string) string {
 	return s
 }
 
-func ParseMountsFromFile(file *os.File) ([]MountEntry, error) {
-	var mounts []MountEntry
-	scanner := bufio.NewScanner(file)
+// ParseMounts parses the mountpoints information from /proc/mounts.
+//
+//	var mounts string
+//
+// should be a multi-line string where each line should contain lines in the format:
+//
+//	source target fstype options dump pass
+func ParseMounts(mounts string) ([]MountEntry, error) {
+	var ms []MountEntry
+	reader := strings.NewReader(mounts)
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		line := scanner.Text()
 		fields := strings.Fields(line)
@@ -49,7 +70,7 @@ func ParseMountsFromFile(file *os.File) ([]MountEntry, error) {
 			Dump:    dump,
 			Pass:    pass,
 		}
-		mounts = append(mounts, entry)
+		ms = append(ms, entry)
 	}
-	return mounts, nil
+	return ms, nil
 }
