@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package mount provides functions to mount and unmount filesystems.
 package mount
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"simplek8s/pkg/common"
-	"strings"
+	"simplek8s/pkg/linux/blkid"
 
 	"golang.org/x/sys/unix"
 )
 
 // Wrappers that can be mocked in tests.
 var (
-	sysMount   = unix.Mount
-	sysUnmount = unix.Unmount
+	sysMount              = unix.Mount
+	sysUnmount            = unix.Unmount
+	blkidDetectFileSystem = blkid.DetectFileSystem
 )
 
 // Can be concat by using |.
@@ -148,22 +148,6 @@ var Mountpoints = struct {
 	Usr:     MountPoint{"/usr", 0o755, "tmpfs", "tmpfs", MountFlagNoSUID | MountFlagNoDev, ""},
 }
 
-func blkidType(dev string) (string, error) {
-	// blkid command requires /dev/null.
-	if !common.IsPathExists("/dev/null") {
-		Mount(Mountpoints.Dev)
-		defer Unmount(Mountpoints.Dev.Target, 0)
-	}
-
-	cmd := "/usr/sbin/blkid"
-	args := []string{"-o", "value", "-s", "TYPE", dev}
-	out, err := exec.Command(cmd, args...).Output()
-	if err != nil {
-		return "", fmt.Errorf("error running: %s %s: %w", cmd, strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 // Mount creates destination directory and mounts the mountpoints there.
 func Mount(mount MountPoint) error {
 	// Ensure that destination exists.
@@ -173,7 +157,7 @@ func Mount(mount MountPoint) error {
 
 	// unix.Mount requires FSType, it can not be empty or auto.
 	if mount.Source != "" && mount.Source != "none" && (mount.Fstype == "" || mount.Fstype == "auto") {
-		fstype, err := blkidType(mount.Source)
+		fstype, err := blkidDetectFileSystem(mount.Source)
 		if err != nil {
 			return fmt.Errorf("cannot fetch filesystem type from %s: %w", mount.Source, err)
 		}
