@@ -90,3 +90,5 @@ func ParsePartitions(partitions string) ([]Partitions, error) {
 
 	return parts, nil
 }
+
+const PartitionsFilepath = "/proc/partitions"

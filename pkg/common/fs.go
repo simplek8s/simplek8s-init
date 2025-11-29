@@ -99,6 +99,15 @@ func ForEachLineOfReader(r io.Reader, fn func(line string) error) error {
 	return nil
 }
 
+// ReadFileAsString reads a file and returns its content as a string.
+func ReadFileAsString(filepath string) (string, error) {
+	data, err := os.ReadFile(filepath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
 // We can use a mock for it.
 var osLchown = os.Lchown
 var osSymlink = os.Symlink

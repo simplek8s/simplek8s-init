@@ -74,3 +74,5 @@ func ParseMounts(mounts string) ([]MountEntry, error) {
 	}
 	return ms, nil
 }
+
+const MountsFilepath = "/proc/mounts"

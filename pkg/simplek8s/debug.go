@@ -38,7 +38,7 @@ func IsDebug() bool {
 		}
 
 		// Get debug value from "/proc/cmdline".
-		cmdline, err := procfs.GetCmdline()
+		cmdline, err := common.ReadFileAsString(procfs.CmdlineFilepath)
 		if err != nil {
 			isDebug = false
 			return

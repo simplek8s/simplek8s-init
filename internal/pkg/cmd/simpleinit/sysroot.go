@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"simplek8s/pkg/common"
 	"simplek8s/pkg/cp"
 	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/procfs"
@@ -205,7 +206,7 @@ func createSysroot(where string) error {
 	}
 
 	// Get timeout from rootwait cmdline.
-	cmdline, err := procfs.GetCmdline()
+	cmdline, err := common.ReadFileAsString(procfs.CmdlineFilepath)
 	if err != nil {
 		return fmt.Errorf("cannot read cmdline: %w", err)
 	}

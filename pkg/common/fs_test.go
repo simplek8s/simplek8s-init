@@ -382,3 +382,34 @@ func TestCreateSymlink_LchownError(t *testing.T) {
 		t.Fatalf("expected forced Lchown error, got %v:", err)
 	}
 }
+
+func TestReadFileAsString(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.txt")
+	tmpContent := "content of test.txt"
+	if err := os.WriteFile(tmpFile, []byte(tmpContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		filepath string
+		want     string
+		wantErr  error
+	}{
+		{"success", tmpFile, tmpContent, nil},
+		{"file_notfound", filepath.Join(tmpDir, "nonexistent.txt"), "", os.ErrNotExist},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := ReadFileAsString(tt.filepath)
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("want: %q, got %q", tt.wantErr, err)
+			}
+
+			if data != tt.want {
+				t.Fatalf("want: %q, got %q", tt.want, data)
+			}
+		})
+	}
+}

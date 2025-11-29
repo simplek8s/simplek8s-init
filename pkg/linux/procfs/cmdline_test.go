@@ -15,8 +15,6 @@
 package procfs_test
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -335,51 +333,5 @@ func TestParseScalarUnsupportedType(t *testing.T) {
 	}
 	if err.Error() != "unsupported scalar type" {
 		t.Errorf("Expected 'unsupported scalar type', got %v", err.Error())
-	}
-}
-
-func TestGetCmdline_Success(t *testing.T) {
-	// Create temp file
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "cmdline")
-	expectedContent := "BOOT_IMAGE=/vmlinuz root=/dev/sda1\n"
-
-	if err := os.WriteFile(tmpFile, []byte(expectedContent), 0644); err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-
-	// Override filepath
-	originalPath := procfs.CmdlineFilepath
-	t.Cleanup(func() { procfs.CmdlineFilepath = originalPath })
-	procfs.CmdlineFilepath = tmpFile
-
-	// Test
-	result, err := procfs.GetCmdline()
-
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	if result != expectedContent {
-		t.Errorf("Expected %q, got %q", expectedContent, result)
-	}
-}
-
-// Point to non-existent file
-func TestGetCmdline_Error(t *testing.T) {
-	// Override filepath
-	originalPath := procfs.CmdlineFilepath
-	t.Cleanup(func() { procfs.CmdlineFilepath = originalPath })
-	procfs.CmdlineFilepath = "/nonexistent/path/cmdline"
-
-	// Test
-	result, err := procfs.GetCmdline()
-
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-
-	if result != "" {
-		t.Errorf("Expected empty string on error, got %q", result)
 	}
 }

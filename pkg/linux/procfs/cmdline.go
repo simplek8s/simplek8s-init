@@ -17,7 +17,6 @@ package procfs
 
 import (
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -229,12 +228,4 @@ func GetCmdlineValue[T any](cmdline string, key string, defaultValue T) (T, erro
 	return defaultValue, nil
 }
 
-var CmdlineFilepath = "/proc/cmdline"
-
-func GetCmdline() (string, error) {
-	data, err := os.ReadFile(CmdlineFilepath)
-	if err != nil {
-		return "", err
-	}
-	return string(data), err
-}
+const CmdlineFilepath = "/proc/cmdline"
