@@ -254,7 +254,7 @@ func writeNonPersistentSession(sr *sysroot.Sysroot) error {
 	}
 
 	// Generate root password.
-	plain, hash, err := generateshadow.GeneratePwd("root")
+	plain, hash, err := generateshadow.GeneratePwdWithDefault("root")
 	if err != nil {
 		return fmt.Errorf("can not generate root pwd: %w", err)
 	}

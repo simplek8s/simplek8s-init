@@ -16,10 +16,23 @@ package mkpasswd
 
 import (
 	"errors"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+
 	"simplek8s/pkg/log"
+	"simplek8s/pkg/simplek8s/generateshadow"
+
+	"golang.org/x/term"
 )
 
 const CmdHelp = "Generate a hashed shadow password. Usage: mkpasswd [options]"
+
+var CmdOptions = []string{
+	"-r, --random\tGenerate a random password",
+}
 
 // CmdFn will:
 //   - Generates a hashed shadow password based on user input or default settings.
@@ -28,8 +41,63 @@ func CmdFn() error {
 	log.Trace("start")
 	defer log.Trace("end")
 
-	//TODO: Ask for user input and print hashed password.
-	//TODO: Generate random password and print plained and hashed password.
+	isTerm := term.IsTerminal(int(os.Stdin.Fd()))
 
-	return errors.New("unimplemented")
+	// Read input from stdin if available.
+	var stdin []byte
+	if !isTerm {
+		stdin, _ = io.ReadAll(os.Stdin)
+	}
+
+	// Check for the random flag.
+	isRandom := false
+	if slices.Index(os.Args, "-r") >= 0 {
+		isRandom = true
+	} else if slices.Index(os.Args, "--random") >= 0 {
+		isRandom = true
+	}
+
+	var pwd string
+	if isRandom {
+		pwd, err := generateshadow.GeneratePwd()
+		if err != nil {
+			return err
+		}
+
+		// Print plain generated password.
+		fmt.Printf("Plain: %s\n", pwd)
+	} else if len(stdin) > 0 {
+		pwd = strings.TrimSpace(string(stdin))
+	} else if isTerm {
+		// Ask for user input.
+		var err error
+		var pwd2 string
+
+		pwd, err = PromptSecret("Password: ")
+		if err != nil {
+			return err
+		}
+
+		pwd2, err = PromptSecret("Repeat Password: ")
+		if err != nil {
+			return err
+		}
+
+		if pwd != pwd2 {
+			return errors.New("passwords do not match")
+		}
+	} else {
+		return errors.New("cannot ask for a password because term is not available")
+	}
+
+	// Hash pwd.
+	hashed, err := generateshadow.GenerateShadowPassword(pwd)
+	if err != nil {
+		return err
+	}
+
+	// Print hashed password.
+	fmt.Printf("Hashed: %s\n", hashed)
+
+	return nil
 }

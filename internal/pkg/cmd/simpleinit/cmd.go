@@ -30,16 +30,16 @@ const CmdHelp = "Bootstrap from (initrd) root to the next (systemd) root."
 //   - Prepares the next root filesystem and switches to it.
 //   - Exits cleanly.
 func CmdFn() error {
-	logToDevKmsg()
-
-	log.Trace("start")
-	defer log.Trace("end")
-
 	// Check if we are PID 1.
 	pid := os.Getpid()
 	if pid != 1 {
 		return fmt.Errorf("not PID 1: %d", pid)
 	}
+
+	logToDevKmsg()
+
+	log.Trace("start")
+	defer log.Trace("end")
 
 	where := "/sysroot"
 	err := bootNextRoot(where)

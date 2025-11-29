@@ -34,14 +34,15 @@ import (
 var Version = "0.0.1610038522"
 
 var cmds = []struct {
-	name string
-	fn   func() error
-	help string
+	name    string
+	fn      func() error
+	help    string
+	options []string
 }{
-	{"init", simpleinit.CmdFn, simpleinit.CmdHelp},
-	{"wizard", wizard.CmdFn, wizard.CmdHelp},
-	{"mkpasswd", mkpasswd.CmdFn, mkpasswd.CmdHelp},
-	{"switchroot", switchroot.CmdFn, switchroot.CmdHelp},
+	{"init", simpleinit.CmdFn, simpleinit.CmdHelp, nil},
+	{"wizard", wizard.CmdFn, wizard.CmdHelp, nil},
+	{"mkpasswd", mkpasswd.CmdFn, mkpasswd.CmdHelp, mkpasswd.CmdOptions},
+	{"switchroot", switchroot.CmdFn, switchroot.CmdHelp, nil},
 }
 
 func help() error {
@@ -61,6 +62,13 @@ Currently defined functions:
 		if len(cmd.help) > 0 {
 			fmt.Printf("    %s\n", cmd.help)
 		}
+		if len(cmd.options) > 0 {
+			fmt.Println("\n    Options:")
+			for _, o := range cmd.options {
+				fmt.Printf("      %s\n", o)
+			}
+		}
+		fmt.Println()
 	}
 
 	return err
@@ -73,7 +81,7 @@ func fetchCmd() string {
 	if len(os.Args) == 1 {
 		return filepath.Base(os.Args[0])
 	} else if len(os.Args) > 1 {
-		// Linux kernel sends to us all tis kernel arguments.
+		// Linux kernel sends to us all kernel arguments.
 		if filepath.Base(os.Args[0]) == "init" {
 			return "init"
 		}

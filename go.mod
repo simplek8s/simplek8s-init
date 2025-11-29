@@ -4,11 +4,12 @@ go 1.25
 
 require (
 	github.com/diskfs/go-diskfs v1.7.0
-	github.com/goccy/go-yaml v1.18.0
+	github.com/goccy/go-yaml v1.19.0
 	github.com/sirupsen/logrus v1.9.4-0.20230606125235-dd1b4c2e81af
 	github.com/tredoe/osutil v1.5.0
 	go.openly.dev/pointy v1.3.0
 	golang.org/x/sys v0.38.0
+	golang.org/x/term v0.37.0
 )
 
 require (

@@ -207,19 +207,27 @@ func RandomDecorate(s string, n int) string {
 	return string(runes)
 }
 
+func GeneratePwd() (string, error) {
+	nWords := 3
+	// generate a secure password.
+	words, err := GeneratePronounceablePassphrase(nWords, 2)
+	if err != nil {
+		return "", fmt.Errorf("cannot generate passphrase: %w", err)
+	}
+	pwd := strings.Join(words, "-")
+	pwd = RandomUppercase(pwd, 1)
+	pwd = RandomDecorate(pwd, 1)
+	return pwd, nil
+}
+
 // Generates a password.
 // defaultPwd will be used when debug is true.
-func GeneratePwd(defaultPwd string) (plain string, hashed string, err error) {
+func GeneratePwdWithDefault(defaultPwd string) (plain string, hashed string, err error) {
 	if !simplek8s.IsDebug() {
-		nWords := 3
-		// generate a secure password.
-		words, err := GeneratePronounceablePassphrase(nWords, 2)
+		defaultPwd, err = GeneratePwd()
 		if err != nil {
-			return "", "", fmt.Errorf("cannot generate passphrase: %w", err)
+			return "", "", err
 		}
-		defaultPwd = strings.Join(words, "-")
-		defaultPwd = RandomUppercase(defaultPwd, 1)
-		defaultPwd = RandomDecorate(defaultPwd, 1)
 	}
 
 	hash, err := GenerateShadowPassword(defaultPwd)
