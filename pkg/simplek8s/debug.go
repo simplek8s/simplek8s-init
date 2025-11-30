@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"simplek8s/pkg/common"
+	"simplek8s/pkg/linux/mount"
 	"simplek8s/pkg/linux/procfs"
 )
 
@@ -38,6 +39,12 @@ func IsDebug() bool {
 		}
 
 		// Get debug value from "/proc/cmdline".
+		if !common.IsPathExists(procfs.CmdlineFilepath) {
+			if err := mount.Mount(mount.Mountpoints.Proc); err != nil {
+				isDebug = false
+				return
+			}
+		}
 		cmdline, err := common.ReadFileAsString(procfs.CmdlineFilepath)
 		if err != nil {
 			isDebug = false

@@ -206,6 +206,11 @@ func createSysroot(where string) error {
 	}
 
 	// Get timeout from rootwait cmdline.
+	if !common.IsPathExists(procfs.CmdlineFilepath) {
+		if err := mount.Mount(mount.Mountpoints.Proc); err != nil {
+			return fmt.Errorf("cannot mount %s: %w", mount.Mountpoints.Proc.Target, err)
+		}
+	}
 	cmdline, err := common.ReadFileAsString(procfs.CmdlineFilepath)
 	if err != nil {
 		return fmt.Errorf("cannot read cmdline: %w", err)
