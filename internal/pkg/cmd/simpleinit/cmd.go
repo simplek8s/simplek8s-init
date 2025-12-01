@@ -26,7 +26,7 @@ import (
 const CmdHelp = "Bootstrap from (initrd) root to the next (systemd) root."
 
 // CmdFn will:
-//   - Verifies that the process is PID 1.
+//   - Verifies that the process is PID 1.
 //   - Prepares the next root filesystem and switches to it.
 //   - Exits cleanly.
 func CmdFn() error {
