@@ -10,14 +10,14 @@ The boot sequence of SimpleK8s is divided into two main stages:
 
 | Stage       | Description |
 | ----------- | ----------- |
-| **Initrd**  | The system runs from a kernel-embeded temporary environment. SimpleK8s Init acts as PID 1 and prepares the real root filesystem. |
+| **Initrd**  | The system runs from a kernel-embedded temporary environment. SimpleK8s Init acts as PID 1 and prepares the real root filesystem. |
 | **Sysroot** | Control is handed over to systemd running on the prepared sysroot. Users and groups will be populated on the first boot. Real services are started. |
 
 ---
 
 ## Initrd Stage
 
-During this stage, the current system boots from a kernel-embeded temporary root filesystem (initrd).
+During this stage, the current system boots from a kernel-embedded temporary root filesystem (initrd).
 
 **SimpleK8s Init**, running as PID 1, performs the following actions:
 
