@@ -1,4 +1,4 @@
-# simplek8s.yaml
+# SimpleK8s Init
 
 ![SimpleK8s Init Logo](assets/icon.png)
 
@@ -17,9 +17,9 @@ Once the sysroot has been prepared, SimpleK8s Init hands control over to
 
 ## 📄 Documentation
 
-| Topic | Description |
-| ----- | ----------- |
-| [Boot Sequence](docs/boot-sequence.md)   | A detailed explanation of the SimpleK8s Init boot sequence. |
+| Topic                                    | Description                                                      |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| [Boot Sequence](docs/boot-sequence.md)   | A detailed explanation of the SimpleK8s Init boot sequence.      |
 | [simplek8s.yaml](docs/simplek8s-yaml.md) | How to configure `simplek8s.yaml`, including practical examples. |
 
 ## 🤝 Contributing
