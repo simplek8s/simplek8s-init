@@ -1,24 +1,112 @@
+# Boot Sequence
+
+This document describes the boot sequence of the **SimpleK8s Init** system.
+
+---
+
+## Overview
+
+The boot sequence of SimpleK8s is divided into two main stages:
+
+| Stage       | Description |
+| ----------- | ----------- |
+| **Initrd**  | The system runs from a kernel-embeded temporary environment. SimpleK8s Init acts as PID 1 and prepares the real root filesystem. |
+| **Sysroot** | Control is handed over to systemd running on the prepared sysroot. Users and groups will be populated on the first boot. Real services are started. |
+
+---
+
+## Initrd Stage
+
+During this stage, the current system boots from a kernel-embeded temporary root filesystem (initrd).
+
+**SimpleK8s Init**, running as PID 1, performs the following actions:
+
+### Sequence of Actions
+
 ```mermaid
-flowchart
-  %% Legend
-  step[[step]] -- action --> process
+sequenceDiagram
+    participant FW as Firmware/Bootloader
+    participant INITRD as SimpleK8s Init (PID1)
+    participant SYSROOT as /sysroot
+    participant SYSTEMD as systemd (PID1)
 
-  subgraph a [initrd]
-    initrd[[initrd]]
+    FW->>INITRD: Load kernel + initrd
+    activate INITRD
+    INITRD->>SYSROOT: Mount tmpfs at /sysroot
+    INITRD->>SYSROOT: Create read-only /usr
+    INITRD->>INITRD: Scan FAT32 partitions for simplek8s.yaml
 
-    initrd -- exec --> initrd_systemd_generator
-    initrd_systemd_generator -- create --> initrd_mount
-    initrd_systemd_generator -- create --> initrd_populate
-    initrd_mount -- exec --> initrd_populate
-  end
+    alt simplek8s.yaml found
+      INITRD->>SYSROOT: Copy simplek8s.yaml -> /sysroot/run/simplek8s/
+      INITRD->>SYSROOT: Mount real filesystems
+    else simplek8s.yaml not found
+      INITRD->>SYSROOT: Mount tmpfs at /sysroot/var
+    end
 
-  subgraph b [sysroot]
-    sysroot[[sysroot]]
+    INITRD->>SYSROOT: Bind-mount /sysroot/var paths
+    INITRD->>SYSROOT: Prepare transient /sysroot/run files for systemd
+    INITRD->>SYSTEMD: Exec /usr/lib/systemd/systemd (PID1)
+    deactivate INITRD
 
-    initrd_populate -- switch --> sysroot
-    sysroot -- exec --> sysroot_systemd_generator
-    sysroot_systemd_generator -- create --> sysroot_mount
-    sysroot_systemd_generator -- create --> sysroot_populate
-    sysroot_mount -- exec --> sysroot_populate
-  end
+    activate SYSTEMD
+    deactivate SYSTEMD
 ```
+
+### simplek8s.yaml
+
+This file defines some system configurations, as mountpoints, users, groups,
+files, directories, and links.
+You can find more details about this file structure and its usage in the next
+[simplek8s-yaml.md document](simplek8s-yaml.md).
+
+SimpleK8s Init searches **all FAT32 partitions** for a `simplek8s.yaml`
+configuration file in the next paths:
+
+- `/`
+- `/simplek8s/`
+- `/EFI/`
+- `/EFI/simplek8s/`
+- `/boot/`
+- `/boot/simplek8s/`
+- `/boot/EFI/`
+- `/boot/EFI/simplek8s/`
+
+If it is found, the configuration file is copied to:
+`/sysroot/run/simplek8s/simplek8s.yaml`.
+
+### Bind-Mounted Directories
+
+| From                                  | To                                |
+| ------------------------------------- | --------------------------------- |
+| `/sysroot/var/etc`                    | `/sysroot/etc`                    |
+| `/sysroot/var/home`                   | `/sysroot/home`                   |
+| `/sysroot/var/mnt`                    | `/sysroot/mnt`                    |
+| `/sysroot/var/opt`                    | `/sysroot/opt`                    |
+| `/sysroot/var/root`                   | `/sysroot/root`                   |
+| `/sysroot/var/usr/libexec/kubernetes` | `/sysroot/usr/libexec/kubernetes` |
+| `/sysroot/var/usr/local`              | `/sysroot/usr/local`              |
+
+---
+
+## Sysroot Stage
+
+Once control transfers kernel PID1 to `/sysroot/usr/lib/systemd/systemd`, the
+**sysroot stage** begins.
+
+### Sysroot Stage Overview
+
+```mermaid
+flowchart TD
+    A["systemd (PID1)"]
+    A --> B["systemd-tmpfiles creates users/groups from default and /run/{sysusers.d,credstore}"]
+    A --> C[Start simplek8s-wizard]
+    A --> D[Greetings with the generated root password on non-persistent systems when simplek8s.yaml is not found]
+```
+
+### Behavior Summary
+
+| Component | Purpose |
+| --------- | ------- |
+| `systemd-tmpfiles`       | Populates users and groups from system defaults and transient config (`/run/credstore`, `/run/sysusers.d`). |
+| `simplek8s.yaml` missing | A random root password was generated and is exposed via `/run/issue.d/` to display in the login banner. |
+| Core services            | The system downloads and launches `containerd`, `kubelet`, and `simplek8s-wizard`. |
