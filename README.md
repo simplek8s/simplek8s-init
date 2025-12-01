@@ -1,5 +1,7 @@
 # simplek8s.yaml
 
+![SimpleK8s Init Logo](assets/icon.png)
+
 **SimpleK8s Init** configures and populates the **initrd** and **sysroot** boot
 stages during early system initialization.
 
