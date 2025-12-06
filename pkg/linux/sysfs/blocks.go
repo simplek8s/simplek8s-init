@@ -18,8 +18,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
 )
 
 // Injected functions for easier testing.

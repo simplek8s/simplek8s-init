@@ -18,7 +18,7 @@ import (
 	"slices"
 	"testing"
 
-	"simplek8s/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
 )
 
 // A simple struct for testing purposes.

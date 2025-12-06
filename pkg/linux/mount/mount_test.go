@@ -18,8 +18,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"simplek8s/pkg/linux/blkid"
 	"testing"
+
+	"github.com/simplek8s/simplek8s-init/pkg/linux/blkid"
 
 	"golang.org/x/sys/unix"
 )

@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"simplek8s/pkg/linux/procfs"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/procfs"
 )
 
 type testCase struct {

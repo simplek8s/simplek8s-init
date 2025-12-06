@@ -22,8 +22,8 @@ import (
 	"slices"
 	"strings"
 
-	"simplek8s/pkg/log"
-	"simplek8s/pkg/simplek8s/generateshadow"
+	"github.com/simplek8s/simplek8s-init/pkg/log"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/generateshadow"
 
 	"golang.org/x/term"
 )

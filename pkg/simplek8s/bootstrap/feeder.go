@@ -24,10 +24,10 @@ import (
 	"strings"
 	"syscall"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/linux/passwd"
-	sr "simplek8s/pkg/simplek8s/sysroot"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/passwd"
+	sr "github.com/simplek8s/simplek8s-init/pkg/simplek8s/sysroot"
 
 	log "github.com/sirupsen/logrus"
 	"go.openly.dev/pointy"

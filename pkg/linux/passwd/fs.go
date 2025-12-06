@@ -21,7 +21,7 @@ import (
 	"strings"
 	"syscall"
 
-	"simplek8s/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
 )
 
 // ReadShadowFile fetchs all shadows from filename (usually "/etc/shadow").

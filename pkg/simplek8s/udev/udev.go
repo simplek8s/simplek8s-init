@@ -22,8 +22,8 @@ import (
 	"syscall"
 	"time"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
 )
 
 const timeout = 5 * time.Second

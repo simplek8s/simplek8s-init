@@ -19,10 +19,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"golang.org/x/sys/unix"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s"
 
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/simplek8s"
+	"golang.org/x/sys/unix"
 )
 
 func dropToShell(where string, reason string) error {

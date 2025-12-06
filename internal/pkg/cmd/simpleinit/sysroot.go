@@ -21,17 +21,17 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/cp"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/procfs"
+	"github.com/simplek8s/simplek8s-init/pkg/log"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/bootstrap"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/sysroot"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/sysroot/writer/systemd"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/cp"
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/linux/procfs"
-	"simplek8s/pkg/log"
-	"simplek8s/pkg/simplek8s"
-	"simplek8s/pkg/simplek8s/bootstrap"
-	"simplek8s/pkg/simplek8s/sysroot"
-	"simplek8s/pkg/simplek8s/sysroot/writer/systemd"
+	"golang.org/x/sys/unix"
 )
 
 // createUsr mounts tmpfs into `where` (normally `/sysroot/usr`), populates it

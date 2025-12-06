@@ -24,7 +24,7 @@ import (
 	"strings"
 	"unicode"
 
-	"simplek8s/pkg/simplek8s"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s"
 
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )

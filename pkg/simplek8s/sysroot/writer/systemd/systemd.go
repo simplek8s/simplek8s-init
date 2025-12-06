@@ -23,12 +23,12 @@ import (
 	"slices"
 	"strings"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/linux/passwd"
-	"simplek8s/pkg/simplek8s/generateshadow"
-	"simplek8s/pkg/simplek8s/sysroot"
-	"simplek8s/pkg/simplek8s/udev"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/passwd"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/generateshadow"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/sysroot"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/udev"
 
 	log "github.com/sirupsen/logrus"
 )

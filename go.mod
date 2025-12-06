@@ -1,4 +1,4 @@
-module simplek8s
+module github.com/simplek8s/simplek8s-init
 
 go 1.25
 

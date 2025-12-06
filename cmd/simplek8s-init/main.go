@@ -20,15 +20,15 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/mkpasswd"
+	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/simpleinit"
+	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/switchroot"
+	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/wizard"
+
+	"github.com/simplek8s/simplek8s-init/pkg/log"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s"
+
 	l "github.com/sirupsen/logrus"
-
-	"simplek8s/pkg/log"
-	"simplek8s/pkg/simplek8s"
-
-	"simplek8s/internal/pkg/cmd/mkpasswd"
-	"simplek8s/internal/pkg/cmd/simpleinit"
-	"simplek8s/internal/pkg/cmd/switchroot"
-	"simplek8s/internal/pkg/cmd/wizard"
 )
 
 var Version = "0.0.1610038522"

@@ -17,8 +17,10 @@ package switchroot
 import (
 	"fmt"
 	"os"
-	"simplek8s/internal/pkg/cmd/simpleinit"
-	"simplek8s/pkg/log"
+
+	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/simpleinit"
+
+	"github.com/simplek8s/simplek8s-init/pkg/log"
 )
 
 const CmdHelp = "Switch root filesystem to the next one."

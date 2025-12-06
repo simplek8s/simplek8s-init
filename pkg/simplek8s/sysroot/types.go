@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 	"io/fs"
 
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/linux/passwd"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/passwd"
 )
 
 type Link struct {

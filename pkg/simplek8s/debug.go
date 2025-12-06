@@ -19,9 +19,9 @@ import (
 	"strconv"
 	"sync"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/linux/procfs"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/procfs"
 )
 
 var (

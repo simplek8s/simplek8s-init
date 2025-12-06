@@ -25,10 +25,10 @@ import (
 	"regexp"
 	"time"
 
-	"simplek8s/pkg/common"
-	"simplek8s/pkg/linux/mount"
-	"simplek8s/pkg/linux/sysfs"
-	"simplek8s/pkg/simplek8s/udev"
+	"github.com/simplek8s/simplek8s-init/pkg/common"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/sysfs"
+	"github.com/simplek8s/simplek8s-init/pkg/simplek8s/udev"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/disk"

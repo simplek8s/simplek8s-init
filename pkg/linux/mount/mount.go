@@ -18,7 +18,8 @@ package mount
 import (
 	"fmt"
 	"os"
-	"simplek8s/pkg/linux/blkid"
+
+	"github.com/simplek8s/simplek8s-init/pkg/linux/blkid"
 
 	"golang.org/x/sys/unix"
 )

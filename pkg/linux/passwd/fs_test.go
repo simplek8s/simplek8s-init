@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"simplek8s/pkg/linux/passwd"
+	"github.com/simplek8s/simplek8s-init/pkg/linux/passwd"
 
 	"go.openly.dev/pointy"
 )
