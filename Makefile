@@ -162,6 +162,7 @@ test: test-cyclo test-misspell test-go ## Execute all tests.
 ##@ Release
 
 %.upx: %
+	rm -f $@
 	upx --best --lzma --no-progress -o $@ $(patsubst %.upx,%,$@)
 
 .PHONY: upx
@@ -171,7 +172,7 @@ upx: ${BINARIES_UPX} ## Compress project binaries with UPX.
 publish: ${BINARIES} ## Publish project binaries.
 	$(foreach FILE, ${BINARIES}, \
 		echo -n '{"filenames":["$(notdir ${FILE})","$(subst .${BUILD_VERSION}.,.latest.,$(notdir ${FILE}))"],"checksum":"'$(shell sha256sum "${FILE}" | cut -d" " -f1)'","tags":["$(subst ${SPACE},"${COMMA}",${TAGS})"]}' > "${FILE}.publish.json" ; \
-		gpg --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \
+		gpg --batch --yes --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \
 		curl \
 			-F "json=@${FILE}.publish.json" \
 			-F "signature=@${FILE}.publish.json.signature" \
@@ -183,7 +184,7 @@ publish: ${BINARIES} ## Publish project binaries.
 publish_upx: ${BINARIES}.upx ## Publish project UPX binaries.
 	$(foreach FILE, ${BINARIES}, \
 		echo -n '{"filenames":["$(notdir ${FILE})","$(subst .${BUILD_VERSION}.,.latest.,$(notdir ${FILE}))"],"checksum":"'$(shell sha256sum "${FILE}.upx" | cut -d" " -f1)'","tags":["$(subst ${SPACE},"${COMMA}",${TAGS})"]}' > "${FILE}.publish.json" ; \
-		gpg --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \
+		gpg --batch --yes --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \
 		curl \
 			-F "json=@${FILE}.publish.json" \
 			-F "signature=@${FILE}.publish.json.signature" \
