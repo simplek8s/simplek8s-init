@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -32,6 +33,18 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.openly.dev/pointy"
 )
+
+// appendWarning records a non-fatal content error: the offending entry is
+// skipped, boot continues, and the message is persisted for the issue banner.
+func appendWarning(warnings *[]string, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	log.Warn(msg)
+	*warnings = append(*warnings, msg)
+}
+
+func isAbsPath(p string) bool {
+	return p != "" && filepath.IsAbs(p)
+}
 
 // parseFileMode parses a permission string as octal (ex: "0755", "755", "0644").
 // It accepts an optional "0o"/"0O" prefix and surrounding whitespace.
@@ -190,12 +203,13 @@ func updateOrAppendFile(files []sr.File, file sr.File) []sr.File {
 // feedByBootstrapConfigGroupsWithGIDs appends into sysroot.Groups groups with
 // proper GIDs.
 //
-// Groups without GIDs or empty names will be skipped.
-func feedByBootstrapConfigGroupsWithGIDs(config Config, sysroot *sr.Sysroot) {
+// Groups without GIDs or empty names will be skipped with a warning.
+func feedByBootstrapConfigGroupsWithGIDs(config Config, sysroot *sr.Sysroot, warnings *[]string) {
 	// First, create user defined groups with proper GIDs.
 	for _, group := range config.Groups {
 		// Skip empty group names.
 		if group.Name == "" {
+			appendWarning(warnings, "skip group with empty name")
 			continue
 		}
 
@@ -218,10 +232,11 @@ func feedByBootstrapConfigGroupsWithGIDs(config Config, sysroot *sr.Sysroot) {
 // already defined.
 //
 // Example: create the "root" group for the "root" user.
-func feedByBootstrapConfigGroupsFromUsers(config Config, sysroot *sr.Sysroot) {
+func feedByBootstrapConfigGroupsFromUsers(config Config, sysroot *sr.Sysroot, warnings *[]string) {
 	for _, user := range config.Users {
 		// Skip empty usernames.
 		if user.Name == "" {
+			appendWarning(warnings, "skip user with empty name")
 			continue
 		}
 
@@ -252,11 +267,12 @@ func feedByBootstrapConfigGroupsFromUsers(config Config, sysroot *sr.Sysroot) {
 // feedByBootstrapConfigGroupsWithoutGIDs appends into sysroot.Groups user
 // defined groups without GIDs.
 //
-// Groups with empty names will be skipped.
-func feedByBootstrapConfigGroupsWithoutGIDs(config Config, sysroot *sr.Sysroot) {
+// Groups with empty names will be skipped with a warning.
+func feedByBootstrapConfigGroupsWithoutGIDs(config Config, sysroot *sr.Sysroot, warnings *[]string) {
 	for _, group := range config.Groups {
 		// Skip empty group names.
 		if group.Name == "" {
+			appendWarning(warnings, "skip group with empty name")
 			continue
 		}
 
@@ -277,23 +293,21 @@ func feedByBootstrapConfigGroupsWithoutGIDs(config Config, sysroot *sr.Sysroot) 
 	}
 }
 
-func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config) error {
+func feedByBootstrapConfigGroups(sysroot *sr.Sysroot, config Config, warnings *[]string) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
 	}).Trace("start")
 	defer log.Trace("end")
 
-	feedByBootstrapConfigGroupsWithGIDs(config, sysroot)
-	feedByBootstrapConfigGroupsFromUsers(config, sysroot)
-	feedByBootstrapConfigGroupsWithoutGIDs(config, sysroot)
+	feedByBootstrapConfigGroupsWithGIDs(config, sysroot, warnings)
+	feedByBootstrapConfigGroupsFromUsers(config, sysroot, warnings)
+	feedByBootstrapConfigGroupsWithoutGIDs(config, sysroot, warnings)
 
 	// Sort groups by its GIDs.
 	sort.Slice(sysroot.Groups, func(i, j int) bool {
 		return sysroot.Groups[i].GID < sysroot.Groups[j].GID
 	})
-
-	return nil
 }
 
 func determineHomeAndShell(user User) (string, string) {
@@ -363,7 +377,10 @@ func determineGecos(user User) string {
 //   - groups: user group.
 //   - directories: home users.
 //   - files: mostly ~/.ssh/authorized_keys.
-func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
+//
+// Invalid entries are skipped with a warning so a single typo cannot
+// take the whole boot down.
+func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config, warnings *[]string) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
@@ -373,6 +390,7 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 	for _, user := range config.Users {
 		// Skip empty usernames.
 		if user.Name == "" {
+			appendWarning(warnings, "skip user with empty name")
 			continue
 		}
 
@@ -429,10 +447,14 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 				return group.Name == groupName
 			})
 			if i < 0 {
-				return fmt.Errorf("cannot find group %s", groupName)
+				appendWarning(warnings, "skip unknown group %q for user %q", groupName, user.Name)
+				continue
 			}
 			// Try to update an already defined group.
-			sysroot.Groups[i].UserList = append(sysroot.Groups[i].UserList, user.Name)
+			// Avoid duplicate memberships on re-feeds.
+			if !slices.Contains(sysroot.Groups[i].UserList, user.Name) {
+				sysroot.Groups[i].UserList = append(sysroot.Groups[i].UserList, user.Name)
+			}
 		}
 
 		// Create home directory.
@@ -477,10 +499,9 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 		}
 	}
 
-	return nil
 }
 
-func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
+func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config, warnings *[]string) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
@@ -488,10 +509,18 @@ func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Links == nil {
-		return nil
+		return
 	}
 
 	for _, link := range config.Storage.Links {
+		if !isAbsPath(link.Path) {
+			appendWarning(warnings, "skip link with non-absolute path %q", link.Path)
+			continue
+		}
+		if link.Target == "" {
+			appendWarning(warnings, "skip link %q with empty target", link.Path)
+			continue
+		}
 		// By default, UID and GID from own process.
 		// Reset on each iteration so a previous `owner` does not leak
 		// into the next entry when it has no explicit owner.
@@ -515,10 +544,9 @@ func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 		})
 	}
 
-	return nil
 }
 
-func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error {
+func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config, warnings *[]string) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
@@ -526,10 +554,14 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Directories == nil {
-		return nil
+		return
 	}
 
 	for _, directory := range config.Storage.Directories {
+		if !isAbsPath(directory.Path) {
+			appendWarning(warnings, "skip directory with non-absolute path %q", directory.Path)
+			continue
+		}
 		// By default, UID and GID from own process.
 		// Reset on each iteration so a previous `owner` does not leak
 		// into the next entry when it has no explicit owner.
@@ -544,7 +576,8 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 		if directory.Permissions != nil {
 			var err error
 			if mode, err = parseFileMode(*directory.Permissions, mode); err != nil {
-				return err
+				appendWarning(warnings, "skip directory %q: invalid permissions %q", directory.Path, *directory.Permissions)
+				continue
 			}
 		}
 
@@ -559,7 +592,6 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 		})
 	}
 
-	return nil
 }
 
 // TODO:
@@ -579,7 +611,7 @@ func getBytesFromEncoding(encoding *string, content *string) ([]byte, error) {
 	return []byte(*content), nil
 }
 
-func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
+func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config, warnings *[]string) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
@@ -587,11 +619,15 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Files == nil {
-		return nil
+		return
 	}
 
 	for _, file := range config.Storage.Files {
 		filename := file.Path
+		if !isAbsPath(filename) {
+			appendWarning(warnings, "skip file with non-absolute path %q", filename)
+			continue
+		}
 		isOverwrite := common.Get(file.Overwrite, false)
 
 		// By default, UID and GID from own process.
@@ -606,15 +642,15 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 		if file.Permissions != nil {
 			var err error
 			if mode, err = parseFileMode(*file.Permissions, mode); err != nil {
-				log.Error(err)
-				return err
+				appendWarning(warnings, "skip file %q: invalid permissions %q", filename, *file.Permissions)
+				continue
 			}
 		}
 
 		content, err := getBytesFromEncoding(file.Encoding, file.Content)
 		if err != nil {
-			log.Error(err)
-			return err
+			appendWarning(warnings, "skip file %q: %v", filename, err)
+			continue
 		}
 
 		sysroot.Files = updateOrAppendFile(sysroot.Files, sr.File{
@@ -627,7 +663,6 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 		})
 	}
 
-	return nil
 }
 
 func resolveFlags(opts []string) (mount.MountFlag, string) {
@@ -645,7 +680,7 @@ func resolveFlags(opts []string) (mount.MountFlag, string) {
 	return flags, strings.Join(data, ",")
 }
 
-func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
+func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config, warnings *[]string) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
@@ -653,10 +688,14 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 	defer log.Trace("end")
 
 	if config.Storage == nil || config.Storage.Mounts == nil {
-		return nil
+		return
 	}
 
 	for _, m := range config.Storage.Mounts {
+		if m.What == "" || !isAbsPath(m.Where) {
+			appendWarning(warnings, "skip mount with invalid what %q where %q", m.What, m.Where)
+			continue
+		}
 		flags, data := resolveFlags(strings.Split(common.Get(m.Options, ""), ","))
 		sysroot.Mounts = common.UpdateOrAppend(sysroot.Mounts, mount.MountPoint{
 			Target: m.Where,
@@ -670,10 +709,9 @@ func feedByBootstrapConfigMounts(sysroot *sr.Sysroot, config Config) error {
 		})
 	}
 
-	return nil
 }
 
-func markAsFeededByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
+func markAsFeededByBootstrapConfig(sysroot *sr.Sysroot, config Config) {
 	log.WithFields(log.Fields{
 		"sysroot": sysroot,
 		"config":  config,
@@ -688,7 +726,34 @@ func markAsFeededByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 		UID:       0,
 		GID:       0,
 	})
-	return nil
+}
+
+func writeApplyWarnings(sysroot *sr.Sysroot, warnings []string) {
+	if len(warnings) == 0 {
+		return
+	}
+	body := strings.Join(warnings, "\n") + "\n"
+	sysroot.Files = common.UpdateOrAppend(sysroot.Files, sr.File{
+		Overwrite: true,
+		Filename:  "/run/simplek8s/apply-warnings.log",
+		Content:   []byte(body),
+		Mode:      0o400,
+		UID:       0,
+		GID:       0,
+	}, func(a, b sr.File) bool {
+		return a.Filename == b.Filename
+	})
+	banner := fmt.Sprintf("\n\\e{yellow}simplek8s.yaml applied with %d warning(s). See /run/simplek8s/apply-warnings.log\\e{reset}\n", len(warnings))
+	sysroot.Files = common.UpdateOrAppend(sysroot.Files, sr.File{
+		Overwrite: true,
+		Filename:  "/run/issue.d/81-apply-warnings.issue",
+		Content:   []byte(banner),
+		Mode:      0o644,
+		UID:       0,
+		GID:       0,
+	}, func(a, b sr.File) bool {
+		return a.Filename == b.Filename
+	})
 }
 
 func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
@@ -698,19 +763,14 @@ func FeedSysrootByBootstrapConfig(sysroot *sr.Sysroot, config Config) error {
 	}).Trace("start")
 	defer log.Trace("end")
 
-	for _, fn := range []func(sysroot *sr.Sysroot, config Config) error{
-		feedByBootstrapConfigGroups,
-		feedByBootstrapConfigUsers,
-		feedByBootstrapConfigLinks,
-		feedByBootstrapConfigDirectories,
-		feedByBootstrapConfigFiles,
-		feedByBootstrapConfigMounts,
-		markAsFeededByBootstrapConfig,
-	} {
-		if err := fn(sysroot, config); err != nil {
-			log.Error(err)
-			return err
-		}
-	}
+	var warnings []string
+	feedByBootstrapConfigGroups(sysroot, config, &warnings)
+	feedByBootstrapConfigUsers(sysroot, config, &warnings)
+	feedByBootstrapConfigLinks(sysroot, config, &warnings)
+	feedByBootstrapConfigDirectories(sysroot, config, &warnings)
+	feedByBootstrapConfigFiles(sysroot, config, &warnings)
+	feedByBootstrapConfigMounts(sysroot, config, &warnings)
+	markAsFeededByBootstrapConfig(sysroot, config)
+	writeApplyWarnings(sysroot, warnings)
 	return nil
 }

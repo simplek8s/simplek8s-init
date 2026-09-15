@@ -62,6 +62,14 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 	return nil
 }
 
+// isCriticalMount reports whether a mount failure must abort the boot.
+// Only /var and /etc are critical: every default bind (home, root, opt,
+// kubernetes, local) hangs off /var, and systemd needs /etc before exec.
+func isCriticalMount(target string) bool {
+	clean := filepath.Clean("/" + strings.TrimPrefix(filepath.Clean(target), "/"))
+	return clean == "/var" || clean == "/etc"
+}
+
 // Because of the next requirements, we are going to mount all
 // mountpoints in the initrd stage:
 //
@@ -70,7 +78,7 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 //   - /sysroot/etc requires /sysroot/var to be mounted, because /sysroot/etc
 //     binds to /sysroot/var/etc by default.
 //   - simplek8s.yaml could defines more complex environments to mount /etc.
-func writeMounts(mounts []mount.MountPoint, where string) error {
+func writeMounts(mounts []mount.MountPoint, where string) ([]string, error) {
 	log.WithFields(log.Fields{
 		"mounts": mounts,
 		"where":  where,
@@ -80,17 +88,25 @@ func writeMounts(mounts []mount.MountPoint, where string) error {
 	// Ensure that /dev is populated by udev.
 	// This step is required to search disks by label.
 	if err := udev.PopulateDev(); err != nil {
-		return fmt.Errorf("cannot populate /dev by udev: %w", err)
+		return nil, fmt.Errorf("cannot populate /dev by udev: %w", err)
 	}
 
+	var warnings []string
 	for _, m := range mounts {
+		origTarget := m.Target
 		if m.Flags&mount.MountFlagBind != 0 {
 			// Fix source for bind mounts.
 			m.Source = filepath.Join(where, m.Source)
 
 			// Ensure the source directory exists for bind mounts.
 			if err := os.MkdirAll(m.Source, m.Chmod); err != nil {
-				return fmt.Errorf("cannot create directory %s: %w", m.Target, err)
+				msg := fmt.Sprintf("skip mount %s: cannot create source %s: %v", origTarget, m.Source, err)
+				if isCriticalMount(origTarget) {
+					return warnings, fmt.Errorf("%s", msg)
+				}
+				log.Warn(msg)
+				warnings = append(warnings, msg)
+				continue
 			}
 		}
 
@@ -102,11 +118,17 @@ func writeMounts(mounts []mount.MountPoint, where string) error {
 
 		log.WithField("mountpoint", m).Trace()
 		if err := mount.Mount(m); err != nil {
-			return fmt.Errorf("cannot mount %s in %s: %w", m.Source, m.Target, err)
+			msg := fmt.Sprintf("skip mount %s: cannot mount %s in %s: %v", origTarget, m.Source, m.Target, err)
+			if isCriticalMount(origTarget) {
+				return warnings, fmt.Errorf("%s", msg)
+			}
+			log.Warn(msg)
+			warnings = append(warnings, msg)
+			continue
 		}
 	}
 
-	return nil
+	return warnings, nil
 }
 
 func writeShadows(shadows []passwd.Shadow, where string) error {
@@ -304,9 +326,34 @@ func Write(sr *sysroot.Sysroot, where string) error {
 		log.WithError(err).Error("cannot write non persistent session")
 		return err
 	}
-	if err := writeMounts(sr.Mounts, where); err != nil {
+	mountWarnings, err := writeMounts(sr.Mounts, where)
+	if err != nil {
 		log.WithError(err).Error("cannot write mounts")
 		return err
+	}
+	if len(mountWarnings) > 0 {
+		body := strings.Join(mountWarnings, "\n") + "\n"
+		sr.Files = common.UpdateOrAppend(sr.Files, sysroot.File{
+			Overwrite: true,
+			Filename:  "/run/simplek8s/mount-warnings.log",
+			Content:   []byte(body),
+			Mode:      0o400,
+			UID:       0,
+			GID:       0,
+		}, func(a, b sysroot.File) bool {
+			return a.Filename == b.Filename
+		})
+		banner := fmt.Sprintf("\n\\e{yellow}some mounts were skipped (%d). See /run/simplek8s/mount-warnings.log\\e{reset}\n", len(mountWarnings))
+		sr.Files = common.UpdateOrAppend(sr.Files, sysroot.File{
+			Overwrite: true,
+			Filename:  "/run/issue.d/82-mount-warnings.issue",
+			Content:   []byte(banner),
+			Mode:      0o644,
+			UID:       0,
+			GID:       0,
+		}, func(a, b sysroot.File) bool {
+			return a.Filename == b.Filename
+		})
 	}
 	if err := writeLinks(sr.Links, where); err != nil {
 		log.WithError(err).Error("cannot write links")

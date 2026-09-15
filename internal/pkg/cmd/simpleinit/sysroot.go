@@ -221,7 +221,10 @@ func createSysroot(where string) error {
 	fmt.Printf("Fetching simplek8s.yaml... (%ds)\n", timeout)
 
 	// Retrive SimpleK8s bootstrap config.
+	// Live real (err==nil, config==nil) boots non-persistent without extra
+	// warnings. Only a real fetch/parse error adds 83-fetch-error files.
 	cfgPath, config, err := bootstrap.GetConfig(time.Duration(timeout) * time.Second)
+	fetchErr := err
 	if err != nil {
 		log.Warnf("cannot fetch bootstrap config: %v", err)
 	} else if config != nil {
@@ -233,6 +236,30 @@ func createSysroot(where string) error {
 		}
 	} else {
 		fmt.Println("simplek8s.yaml not found. Booting a non persistent session...")
+	}
+
+	if fetchErr != nil {
+		sr.Files = common.UpdateOrAppend(sr.Files, sysroot.File{
+			Overwrite: true,
+			Filename:  "/run/simplek8s/fetch-error.log",
+			Content:   []byte(fetchErr.Error() + "\n"),
+			Mode:      0o400,
+			UID:       0,
+			GID:       0,
+		}, func(a, b sysroot.File) bool {
+			return a.Filename == b.Filename
+		})
+		banner := "\n\\e{red}simplek8s.yaml fetch failed, booting live. See /run/simplek8s/fetch-error.log\\e{reset}\n"
+		sr.Files = common.UpdateOrAppend(sr.Files, sysroot.File{
+			Overwrite: true,
+			Filename:  "/run/issue.d/83-fetch-error.issue",
+			Content:   []byte(banner),
+			Mode:      0o644,
+			UID:       0,
+			GID:       0,
+		}, func(a, b sysroot.File) bool {
+			return a.Filename == b.Filename
+		})
 	}
 
 	if simplek8s.IsDebug() {
