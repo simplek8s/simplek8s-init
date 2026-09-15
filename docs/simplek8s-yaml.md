@@ -29,7 +29,13 @@ The file `simplek8s.yaml` is a YAML document conforming to the following specifi
     - `what` (string): Device or path.
     - `where` (string): Target mount point path.
     - _`type`_ (string): Filesystem type. Default is "auto".
-    - _`options`_ (string): Default is "defaults".
+    - _`options`_ (string): Comma-separated mount options in `mount(8)`/fstab
+      style. Default is `"defaults"` (no-op).
+      Known flags (`ro`, `rw`, `nosuid`, `nodev`, `noexec`, `bind`, `rbind`,
+      `relatime`, ...) become kernel mount flags; `defaults` is accepted and
+      ignored; anything else (ex: `discard`, `uid=1000`, `iocharset=utf8`) is
+      passed verbatim as filesystem data. See `mount.MountFlags` in
+      `pkg/linux/mount` for the full supported flag set.
     - **Deprecated**: ~~_`after`_~~ (list of string):
   - _`links`_ (list of objects):
     - _`overwrite`_ (boolean): Default is false.

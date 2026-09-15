@@ -27,6 +27,8 @@ import (
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/goccy/go-yaml"
 	"go.openly.dev/pointy"
+
+	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
 )
 
 func Test_simple_marshal(t *testing.T) {
@@ -155,6 +157,63 @@ DNS=8.8.8.8
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got: %v, want: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_resolveFlags(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      []string
+		wantFlags mount.MountFlag
+		wantData  string
+	}{
+		{
+			name:      "defaults is a no-op like mount(8)",
+			opts:      []string{"defaults"},
+			wantFlags: 0,
+			wantData:  "",
+		},
+		{
+			name:      "known flags go to Flags, fs data goes to Data",
+			opts:      []string{"rw", "relatime", "discard"},
+			wantFlags: mount.MountFlagRelATime,
+			wantData:  "discard",
+		},
+		{
+			name:      "whitespace around options is ignored",
+			opts:      []string{"rw", " relatime ", " discard"},
+			wantFlags: mount.MountFlagRelATime,
+			wantData:  "discard",
+		},
+		{
+			name:      "empty entries are skipped",
+			opts:      []string{"ro", "", "nosuid"},
+			wantFlags: mount.MountFlagReadOnly | mount.MountFlagNoSUID,
+			wantData:  "",
+		},
+		{
+			name:      "unknown key=value passes through as fs data",
+			opts:      []string{"uid=1000"},
+			wantFlags: 0,
+			wantData:  "uid=1000",
+		},
+		{
+			name:      "unknown bare word passes through as fs data",
+			opts:      []string{"noexec", "foo"},
+			wantFlags: mount.MountFlagNoExec,
+			wantData:  "foo",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFlags, gotData := resolveFlags(tt.opts)
+			if gotFlags != tt.wantFlags {
+				t.Errorf("resolveFlags() flags = %v, want %v", gotFlags, tt.wantFlags)
+			}
+			if gotData != tt.wantData {
+				t.Errorf("resolveFlags() data = %q, want %q", gotData, tt.wantData)
 			}
 		})
 	}

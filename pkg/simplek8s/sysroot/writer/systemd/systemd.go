@@ -102,7 +102,7 @@ func writeMounts(mounts []mount.MountPoint, where string) ([]string, error) {
 			if err := os.MkdirAll(m.Source, m.Chmod); err != nil {
 				msg := fmt.Sprintf("skip mount %s: cannot create source %s: %v", origTarget, m.Source, err)
 				if isCriticalMount(origTarget) {
-					return warnings, fmt.Errorf("%s", msg)
+					return warnings, fmt.Errorf("cannot mount critical %s: %w", origTarget, err)
 				}
 				log.Warn(msg)
 				warnings = append(warnings, msg)
@@ -118,9 +118,11 @@ func writeMounts(mounts []mount.MountPoint, where string) ([]string, error) {
 
 		log.WithField("mountpoint", m).Trace()
 		if err := mount.Mount(m); err != nil {
-			msg := fmt.Sprintf("skip mount %s: cannot mount %s in %s: %v", origTarget, m.Source, m.Target, err)
+			// Name source, target AND data: the kernel EINVAL alone
+			// never says which option the filesystem rejected.
+			msg := fmt.Sprintf("skip mount %s: cannot mount %s in %s (data %q): %v", origTarget, m.Source, m.Target, m.Data, err)
 			if isCriticalMount(origTarget) {
-				return warnings, fmt.Errorf("%s", msg)
+				return warnings, fmt.Errorf("cannot mount critical %s (%s in %s, data %q): %w", origTarget, m.Source, m.Target, m.Data, err)
 			}
 			log.Warn(msg)
 			warnings = append(warnings, msg)

@@ -251,3 +251,37 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 		t.Fatalf("got: %v, want: %v", sysroot, want)
 	}
 }
+
+func TestFeedSysrootByBootstrapConfigMountDefaults(t *testing.T) {
+	// Regression test: `options: defaults` must not reach the mount syscall
+	// as filesystem data (ext4 rejects it with "Unknown parameter
+	// 'defaults'"). Like mount(8), it is a no-op.
+	config := bootstrap.Config{
+		Version: bootstrap.ConfigVersion1,
+		Storage: &bootstrap.Storage{
+			Mounts: []bootstrap.Mount{
+				{
+					What:    "/dev/disk/by-label/var",
+					Where:   "/var",
+					Type:    pointy.String("ext4"),
+					Options: pointy.String("defaults"),
+				},
+			},
+		},
+	}
+
+	sysroot := &sr.Sysroot{}
+	if err := bootstrap.FeedSysrootByBootstrapConfig(sysroot, config); err != nil {
+		t.Fatal(err)
+	}
+	if len(sysroot.Mounts) != 1 {
+		t.Fatalf("got %d mounts, want 1", len(sysroot.Mounts))
+	}
+	got := sysroot.Mounts[0]
+	if got.Data != "" {
+		t.Errorf("got data %q, want empty (defaults must be a no-op)", got.Data)
+	}
+	if got.Source != "/dev/disk/by-label/var" || got.Target != "/var" || got.Fstype != "ext4" {
+		t.Errorf("unexpected mountpoint: %+v", got)
+	}
+}

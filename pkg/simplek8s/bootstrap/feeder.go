@@ -665,11 +665,26 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config, warnings *[]
 
 }
 
+// fstabCompatNoOps are mount(8)/fstab pseudo-options without kernel or
+// filesystem meaning. Like mount(8) does with "defaults", they are accepted
+// and ignored instead of being passed as filesystem data, which filesystems
+// like ext4 reject with EINVAL (e.g. "Unknown parameter 'defaults'").
+// NOTE: only exact no-ops go here. Bare unknown words (ex: "discard") and
+// key=value pairs (ex: "uid=1000") are genuine filesystem data and must keep
+// flowing verbatim into Data.
+var fstabCompatNoOps = map[string]bool{
+	"defaults": true,
+}
+
 func resolveFlags(opts []string) (mount.MountFlag, string) {
 	var flags mount.MountFlag
 	data := []string{}
 
 	for _, opt := range opts {
+		opt = strings.TrimSpace(opt)
+		if opt == "" || fstabCompatNoOps[opt] {
+			continue
+		}
 		if f, ok := mount.MountFlags[opt]; ok {
 			flags |= f
 		} else {
