@@ -386,6 +386,20 @@ func feedByBootstrapConfigUsers(sysroot *sr.Sysroot, config Config) error {
 			sysroot.Shadows = common.UpdateOrAppend(sysroot.Shadows, passwdShadow, func(a, b passwd.Shadow) bool {
 				return a.Name == b.Name
 			})
+		} else if len(user.SSHAuthorizedKeys) > 0 {
+			// A user with SSH keys but no password hash must not
+			// stay locked: systemd-sysusers defaults such users to
+			// "!unprovisioned", and sshd denies even public key
+			// authentication to locked ("!...") accounts. Set the
+			// impossible-but-unlocked "*" password so keys work
+			// while password login stays impossible.
+			passwdShadow := passwd.NewShadow(passwd.Shadow{
+				Name:     user.Name,
+				Password: "*",
+			})
+			sysroot.Shadows = common.UpdateOrAppend(sysroot.Shadows, passwdShadow, func(a, b passwd.Shadow) bool {
+				return a.Name == b.Name
+			})
 		}
 
 		// Include own user name as group.

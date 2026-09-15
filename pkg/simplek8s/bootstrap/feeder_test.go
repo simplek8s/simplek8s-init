@@ -63,6 +63,9 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 			},
 			{
 				Name: "rpi",
+				SSHAuthorizedKeys: []string{
+					"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDnSPJEpeYRLtS0ebiKuFFu2owz4Jwz7vQZ0FcAUARbb opencode@opencode-test",
+				},
 				Groups: []string{
 					"users",
 					"dev_user",
@@ -94,6 +97,13 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 			passwd.NewShadow(passwd.Shadow{
 				Name:     "root",
 				Password: "$6$vV10BRFDn5d3U4.w$9lEgwXZSjXvfqTa161UucWRbTlj53LlokWQ0GYpac3Ralola5UFHsKQ7Xbl7SuWuCuSv19usBGLOXxTkLLgv91",
+			}),
+			// Keys without password hash must unlock the account
+			// ("*") instead of leaving it "!unprovisioned", or
+			// sshd would refuse even public key authentication.
+			passwd.NewShadow(passwd.Shadow{
+				Name:     "rpi",
+				Password: "*",
 			}),
 		},
 		Groups: []passwd.Group{
@@ -198,6 +208,13 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 				UID:       1000,
 				GID:       1000,
 			},
+			{
+				Overwrite: false,
+				Path:      "/home/rpi/.ssh",
+				Mode:      0o700,
+				UID:       1000,
+				GID:       1000,
+			},
 		},
 		Files: []sr.File{
 			{
@@ -207,6 +224,14 @@ func TestFeedSysrootByBootstrapConfig(t *testing.T) {
 				Mode:      0o600,
 				UID:       0,
 				GID:       0,
+			},
+			{
+				Overwrite: false,
+				Filename:  "/home/rpi/.ssh/authorized_keys",
+				Content:   []byte(strings.Join(config.Users[1].SSHAuthorizedKeys, "\n") + "\n"),
+				Mode:      0o600,
+				UID:       1000,
+				GID:       1000,
 			},
 			{
 				Overwrite: true,
