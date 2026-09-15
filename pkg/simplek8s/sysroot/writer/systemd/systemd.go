@@ -52,6 +52,10 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 	if err := os.WriteFile(filename, content, mode); err != nil {
 		return err
 	}
+	// os.WriteFile applies umask, so enforce the exact mode.
+	if err := os.Chmod(filename, mode); err != nil {
+		return err
+	}
 	if err := os.Chown(filename, uid, gid); err != nil {
 		return err
 	}
@@ -163,14 +167,14 @@ func writeUsers(users []passwd.User, where string) error {
 		// Create sysusers.d configuration file to create the user.
 		dst := filepath.Join(where, fmt.Sprintf("/run/sysusers.d/user-%s.conf", u.Name))
 		data := fmt.Appendf(nil, "u %s %d:%d \"%s\" %s %s\n", u.Name, u.UID, u.GID, u.Gecos, u.Home, u.Shell)
-		if err := ensureWriteFile(dst, data, 0x644, 0, 0); err != nil {
+		if err := ensureWriteFile(dst, data, 0o644, 0, 0); err != nil {
 			return fmt.Errorf("cannot write sysusers.d configuration %s: %w", dst, err)
 		}
 
 		// Create tmpfiles.d configuration file to create user's home directory.
 		dst = filepath.Join(where, fmt.Sprintf("/run/tmpfiles.d/home-%s.conf", u.Name))
 		data = fmt.Appendf(nil, "d %s 0750 %d %d\n", u.Home, u.UID, u.GID)
-		if err := ensureWriteFile(dst, data, 0x644, 0, 0); err != nil {
+		if err := ensureWriteFile(dst, data, 0o644, 0, 0); err != nil {
 			return fmt.Errorf("cannot write tmpfiles configuration %s: %w", dst, err)
 		}
 	}
@@ -214,7 +218,7 @@ func writeDirectories(directories []sysroot.Directory, where string) error {
 		if err := os.MkdirAll(dst, d.Mode); err != nil {
 			return err
 		}
-		if err := os.Chown(dst, d.UID, d.UID); err != nil {
+		if err := os.Chown(dst, d.UID, d.GID); err != nil {
 			return err
 		}
 	}
@@ -234,7 +238,7 @@ func writeFiles(files []sysroot.File, where string) error {
 
 		// If overwrite == false and file exists, skip it.
 		if !f.Overwrite && common.IsPathExists(dst) {
-			return nil
+			continue
 		}
 
 		if err := ensureWriteFile(dst, f.Content, f.Mode, f.UID, f.GID); err != nil {

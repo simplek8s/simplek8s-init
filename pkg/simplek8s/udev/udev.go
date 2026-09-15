@@ -16,6 +16,7 @@
 package udev
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -28,76 +29,101 @@ import (
 
 const timeout = 5 * time.Second
 
-var once sync.Once
+var (
+	mu        sync.Mutex
+	populated bool
+)
 
 // PopulateDev populates the /dev directory with necessary devices.
 // For example, this function will populates /dev/disk/by-label.
+//
+// It is idempotent: concurrent calls are serialized and a previous success
+// is cached. A previous failure is NOT cached, so a later call retries.
 func PopulateDev() error {
-	var e error
+	mu.Lock()
+	defer mu.Unlock()
 
-	once.Do(func() {
-		// systemd-udevd requires /dev, /sys, and /proc.
-		if !common.IsPathExists("/dev/kmsg") {
-			if err := mount.Mount(mount.Mountpoints.Dev); err != nil {
-				e = fmt.Errorf("cannot mount /dev: %w", err)
-				return
-			}
-			//defer mount.Unmount(mount.Mountpoints.Dev.Target, 0)
-		}
-		if !common.IsPathExists("/proc/cmdline") {
-			if err := mount.Mount(mount.Mountpoints.Proc); err != nil {
-				e = fmt.Errorf("cannot mount /proc: %w", err)
-				return
-			}
-			//defer mount.Unmount(mount.Mountpoints.Proc.Target, 0)
-		}
-		if !common.IsPathExists("/sys/class") {
-			if err := mount.Mount(mount.Mountpoints.Sys); err != nil {
-				e = fmt.Errorf("cannot mount /sys: %w", err)
-				return
-			}
-			//defer mount.Unmount(mount.Mountpoints.Sys.Target, 0)
-		}
+	if populated {
+		return nil
+	}
 
-		// Execute systemd-udevd as daemon on background.
-		cmd := exec.Command("/usr/lib/systemd/systemd-udevd")
-		if err := cmd.Start(); err != nil {
-			e = fmt.Errorf("cannot start systemd-udevd: %w", err)
-			return
-		}
+	if err := populateDev(); err != nil {
+		return err
+	}
 
-		// Trigger events (udevadm trigger/settle).
-		if err := exec.Command("/usr/bin/udevadm", "trigger", "--action=add").Run(); err != nil {
-			e = fmt.Errorf("cannot trigger udev events: %w", err)
-			return
-		}
-		if err := exec.Command("/usr/bin/udevadm", "settle").Run(); err != nil {
-			e = fmt.Errorf("cannot settle udev events: %w", err)
-			return
-		}
+	populated = true
+	return nil
+}
 
-		// Stop systemd-udevd daemon.
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			e = fmt.Errorf("cannot send SIGTERM to systemd_udevd: %w", err)
-			return
+func populateDev() error {
+	// systemd-udevd requires /dev, /sys, and /proc.
+	if !common.IsPathExists("/dev/kmsg") {
+		if err := mount.Mount(mount.Mountpoints.Dev); err != nil {
+			return fmt.Errorf("cannot mount /dev: %w", err)
 		}
-
-		// Wait for systemd-udevd to finish or kill it on timeout.
-		done := make(chan error, 1)
-		go func() {
-			done <- cmd.Wait()
-		}()
-		select {
-		case <-time.After(timeout):
-			cmd.Process.Kill()
-			cmd.Wait()
-		case err := <-done:
-			if err != nil {
-				e = fmt.Errorf("systemd_udevd exited with error: %w", err)
-				return
-			}
+		//defer mount.Unmount(mount.Mountpoints.Dev.Target, 0)
+	}
+	if !common.IsPathExists("/proc/cmdline") {
+		if err := mount.Mount(mount.Mountpoints.Proc); err != nil {
+			return fmt.Errorf("cannot mount /proc: %w", err)
 		}
-	})
+		//defer mount.Unmount(mount.Mountpoints.Proc.Target, 0)
+	}
+	if !common.IsPathExists("/sys/class") {
+		if err := mount.Mount(mount.Mountpoints.Sys); err != nil {
+			return fmt.Errorf("cannot mount /sys: %w", err)
+		}
+		//defer mount.Unmount(mount.Mountpoints.Sys.Target, 0)
+	}
 
-	return e
+	// Execute systemd-udevd as daemon on background.
+	cmd := exec.Command("/usr/lib/systemd/systemd-udevd")
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("cannot start systemd-udevd: %w", err)
+	}
+	// Ensure the daemon does not leak on failure.
+	daemonRunning := true
+	defer func() {
+		if daemonRunning {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	}()
+
+	// Trigger events (udevadm trigger/settle) with timeouts so a
+	// hung udevadm cannot block PID 1 forever.
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "/usr/bin/udevadm", "trigger", "--action=add").Run(); err != nil {
+		return fmt.Errorf("cannot trigger udev events: %w", err)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "/usr/bin/udevadm", "settle").Run(); err != nil {
+		return fmt.Errorf("cannot settle udev events: %w", err)
+	}
+
+	// Stop systemd-udevd daemon.
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("cannot send SIGTERM to systemd_udevd: %w", err)
+	}
+
+	// Wait for systemd-udevd to finish or kill it on timeout.
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	select {
+	case <-time.After(timeout):
+		_ = cmd.Process.Kill()
+		<-done
+		return fmt.Errorf("timeout waiting for systemd-udevd to exit")
+	case err := <-done:
+		daemonRunning = false
+		if err != nil {
+			return fmt.Errorf("systemd_udevd exited with error: %w", err)
+		}
+	}
+
+	return nil
 }

@@ -46,7 +46,7 @@ sequenceDiagram
 
     INITRD->>SYSROOT: Bind-mount /sysroot/var paths
     INITRD->>SYSROOT: Prepare transient /sysroot/run files for systemd
-    INITRD->>SYSTEMD: Exec /usr/lib/systemd/systemd (PID1)
+    INITRD->>SYSTEMD: Exec /sbin/init (→ systemd) (PID1)
     deactivate INITRD
 
     activate SYSTEMD
@@ -91,23 +91,25 @@ If it is found, the configuration file is copied to:
 
 ## Sysroot Stage
 
-Once control transfers kernel PID1 to `/sysroot/usr/lib/systemd/systemd`, the
-**sysroot stage** begins.
+Once control transfers kernel PID1 to `/sbin/init` (normally a symlink to
+`/usr/lib/systemd/systemd`), the **sysroot stage** begins.
 
 ### Sysroot Stage Overview
 
 ```mermaid
 flowchart TD
     A["systemd (PID1)"]
-    A --> B[systemd-tmpfiles creates users/groups]
-    A --> C[Start simplek8s-wizard]
-    A --> D[Greetings with the root password when simplek8s.yaml is not found]
+    A --> B[systemd-sysusers creates users/groups]
+    A --> C[systemd-tmpfiles creates home directories]
+    A --> D[Start simplek8s-wizard]
+    A --> E[Greetings with the root password when simplek8s.yaml is not found]
 ```
 
 ### Behavior Summary
 
 | Component                | Purpose                                          |
 | ------------------------ | ------------------------------------------------ |
-| `systemd-tmpfiles`       | Creates users and groups from `simplek8s.yaml`.  |
+| `systemd-sysusers`       | Creates users and groups from `simplek8s.yaml`.  |
+| `systemd-tmpfiles`       | Creates home directories and runtime dirs.       |
 | `simplek8s.yaml` missing | Show in the login banner the generated root pwd. |
 | Core services            | Downloads and launches `simplek8s-wizard`.       |

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
+	"runtime/debug"
 
 	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/mkpasswd"
 	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/simpleinit"
@@ -46,8 +46,8 @@ var cmds = []struct {
 }
 
 func help() error {
-	l.Trace("start")
-	defer l.Trace("end")
+	log.Trace("start")
+	defer log.Trace("end")
 
 	_, err := fmt.Printf(`SimpleK8s v%s multi-call binary.
 
@@ -116,6 +116,7 @@ func main() {
 		if basename == cmd.name {
 			found = true
 			err = cmd.fn()
+			break
 		}
 	}
 
@@ -126,18 +127,7 @@ func main() {
 	if err != nil {
 		// Print callback.
 		log.DebugFn(func() string {
-			msg := "Callback:\n"
-			pcs := make([]uintptr, 32)
-			n := runtime.Callers(11, pcs)
-			frames := runtime.CallersFrames(pcs[:n])
-			for {
-				frame, more := frames.Next()
-				msg += fmt.Sprintf("\t%s:%d %s\n", frame.File, frame.Line, frame.Function)
-				if !more {
-					break
-				}
-			}
-			return msg
+			return "Callback:\n" + string(debug.Stack())
 		})
 		log.Error(err.Error())
 

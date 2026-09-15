@@ -36,6 +36,8 @@ var (
 	sysLchown           = os.Lchown
 	sysLutimes          = unix.Lutimes
 	sysReadlink         = os.Readlink
+	sysMkfifo           = unix.Mkfifo
+	sysMknod            = unix.Mknod
 	getUIDFromFileInfo  = func(fi fs.FileInfo) (int, bool) {
 		if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
 			return int(stat.Uid), true
@@ -165,6 +167,82 @@ func copySymlink(fullname, dst string, opt *CopyOptions) error {
 	return nil
 }
 
+func getRdevFromFileInfo(fi fs.FileInfo) (int, bool) {
+	if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int(stat.Rdev), true
+	}
+	return 0, false
+}
+
+func copyFifo(dst string, fi fs.FileInfo) error {
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	_ = os.Remove(dst)
+	return sysMkfifo(dst, uint32(fi.Mode().Perm()))
+}
+
+// copyDeviceNode creates block/char devices preserving the file type.
+func copyDeviceNode(dst string, fi fs.FileInfo) error {
+	rdev, ok := getRdevFromFileInfo(fi)
+	if !ok {
+		return fmt.Errorf("cannot stat device %s for rdev", fi.Name())
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	_ = os.Remove(dst)
+	mode := uint32(fi.Mode().Perm())
+	if fi.Mode()&os.ModeCharDevice != 0 {
+		mode |= unix.S_IFCHR
+	} else {
+		mode |= unix.S_IFBLK
+	}
+	return sysMknod(dst, mode, rdev)
+}
+
+// copyXattrs best-effort copies xattrs from srcFull to dst when requested.
+// All errors are ignored so filesystems without xattr support do not fail
+// the whole copy.
+func copyXattrs(srcFull, dst string, opt *CopyOptions) {
+	if !opt.PreserveXAttrs {
+		return
+	}
+	sz, err := unix.Llistxattr(srcFull, nil)
+	if err != nil || sz == 0 {
+		return
+	}
+	buf := make([]byte, sz)
+	n, err := unix.Llistxattr(srcFull, buf)
+	if err != nil || n <= 0 {
+		return
+	}
+	buf = buf[:n]
+	// Names are NUL separated.
+	start := 0
+	for i, b := range buf {
+		if b != 0 {
+			continue
+		}
+		name := string(buf[start:i])
+		start = i + 1
+		if name == "" {
+			continue
+		}
+		vsz, err := unix.Lgetxattr(srcFull, name, nil)
+		if err != nil || vsz < 0 {
+			continue
+		}
+		val := make([]byte, vsz)
+		vn, err := unix.Lgetxattr(srcFull, name, val)
+		if err != nil || vn < 0 {
+			continue
+		}
+		_ = unix.Lsetxattr(dst, name, val[:vn], 0)
+	}
+}
+
 func preserveOwnership(fi fs.FileInfo, dst string, opt *CopyOptions) error {
 	var uid, gid = -1, -1
 
@@ -245,6 +323,11 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 	}
 
 	fullname := filepath.Join(srcPath, src)
+	// When Fsys is custom (go:embed), Walk paths already contain srcPath,
+	// so Join would duplicate the prefix (ex: "dir/dir/file").
+	if srcPath != "." && strings.HasPrefix(src, srcPath+string(filepath.Separator)) {
+		fullname = src
+	}
 	mode := fi.Mode()
 
 	var err error
@@ -257,6 +340,17 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 
 	case mode&os.ModeSymlink != 0:
 		err = copySymlink(fullname, dst, opt)
+
+	case mode&os.ModeNamedPipe != 0:
+		err = copyFifo(dst, fi)
+
+	case mode&os.ModeDevice != 0:
+		err = copyDeviceNode(dst, fi)
+
+	case mode&os.ModeSocket != 0:
+		// Sockets cannot be copied; skip without failing the whole tree.
+		log.WithFields(log.Fields{"fullname": fullname, "dst": dst}).Debug("skip socket")
+		return nil
 
 	default:
 		err = fmt.Errorf("unsupported file type (%v) at %s", mode, fullname)
@@ -272,7 +366,7 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 	if err := preserveTimestamps(fi, dst, opt); err != nil {
 		return err
 	}
-	//TODO: Preserve xattrs.
+	copyXattrs(fullname, dst, opt)
 
 	return nil
 }
@@ -343,9 +437,13 @@ func copyFile(src string, dst string, fi fs.FileInfo, path string, root string, 
 	cPath = filepath.Clean(cPath)
 	dstFullname := filepath.Join(dst, cPath)
 
-	// Exclude
+	// Exclude: when Fsys is custom, path already contains src (root),
+	// so Join would duplicate it. Use path directly in that case.
 	for _, r := range opt.Exclude {
 		fullSrc := filepath.Join(src, path)
+		if root != "." {
+			fullSrc = path
+		}
 		if r.Match([]byte(fullSrc)) {
 			log.WithFields(log.Fields{
 				"r":       r,

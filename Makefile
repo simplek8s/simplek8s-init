@@ -18,7 +18,8 @@ URL = https://publisher.simplek8s.org/upload/simplek8s-init
 GPG_FINGERPRINT = 33BAAC4BFB20C2327429730A9F16C69F2B9DD678
 TAGS ?= dev
 
-export BUILD_VERSION:=$(shell date --utc +%Y%m%d%H%M)
+BUILD_VERSION ?= $(shell date --utc +%Y%m%d%H%M)
+export BUILD_VERSION
 
 NPROCS = $(shell grep -c 'processor' /proc/cpuinfo || printf 1)
 MAKEFLAGS += -j$(NPROCS)
@@ -30,7 +31,6 @@ LDFLAGS=\
 
 BINARY_NAME=simplek8s-init
 ARCHITECTURES=x86-64 arm64
-GO_SOURCE=$(wildcard *.go)
 BINARIES=$(foreach ARCH, ${ARCHITECTURES}, ${BUILD_DIR}/${BINARY_NAME}.${BUILD_VERSION}.${ARCH})
 BINARIES_UPX=$(foreach BINARY, ${BINARIES}, ${BINARY}.upx)
 
@@ -103,7 +103,7 @@ ${BUILD_DIR}/cover.html: ${BUILD_DIR}/cover.out
 cover: ${BUILD_DIR}/cover.txt ${BUILD_DIR}/cover.html ## Generate coverture reports.
 
 # -gcflags="all=-N -l"
-%.x86-64: ${GO_SOURCE} _mkdir_build
+%.x86-64: _mkdir_build
 	GOOS=linux GOARCH=amd64 \
 		go build \
 			-trimpath \
@@ -112,7 +112,7 @@ cover: ${BUILD_DIR}/cover.txt ${BUILD_DIR}/cover.html ## Generate coverture repo
 			./cmd/${BINARY_NAME}
 	ln -sf $(notdir $@) $(subst .${BUILD_VERSION}.,.latest.,$@)
 
-%.arm64: ${GO_SOURCE} _mkdir_build
+%.arm64: _mkdir_build
 	GOOS=linux GOARCH=arm64 \
 		go build \
 			-trimpath \
@@ -125,7 +125,7 @@ cover: ${BUILD_DIR}/cover.txt ${BUILD_DIR}/cover.html ## Generate coverture repo
 build: ${BINARIES} ## Build project binary.
 
 .PHONY: all
-all: | clean test build ## Execute all tipical targets before publish.
+all: clean test build ## Execute all tipical targets before publish.
 
 
 ##@ Test Dependencies
@@ -155,8 +155,16 @@ test-misspell: misspell ## Run misspell against code.
 test-go: ## Test code.
 	go test ./... -cover
 
+.PHONY: test-vet
+test-vet: ## Vet code.
+	go vet ./...
+
+.PHONY: test-fmt
+test-fmt: ## Check gofmt.
+	test -z "$$(gofmt -l cmd internal pkg)"
+
 .PHONY: test
-test: test-cyclo test-misspell test-go ## Execute all tests.
+test: test-cyclo test-misspell test-vet test-fmt test-go ## Execute all tests.
 
 
 ##@ Release
@@ -181,7 +189,7 @@ publish: ${BINARIES} ## Publish project binaries.
 	)
 
 .PHONY: publish_upx
-publish_upx: ${BINARIES}.upx ## Publish project UPX binaries.
+publish_upx: ${BINARIES_UPX} ## Publish project UPX binaries.
 	$(foreach FILE, ${BINARIES}, \
 		echo -n '{"filenames":["$(notdir ${FILE})","$(subst .${BUILD_VERSION}.,.latest.,$(notdir ${FILE}))"],"checksum":"'$(shell sha256sum "${FILE}.upx" | cut -d" " -f1)'","tags":["$(subst ${SPACE},"${COMMA}",${TAGS})"]}' > "${FILE}.publish.json" ; \
 		gpg --batch --yes --quiet --local-user "${GPG_FINGERPRINT}!" --sign --detach-sign --armor --output "${FILE}.publish.json.signature" "${FILE}.publish.json" ; \

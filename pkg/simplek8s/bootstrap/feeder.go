@@ -33,6 +33,22 @@ import (
 	"go.openly.dev/pointy"
 )
 
+// parseFileMode parses a permission string as octal (ex: "0755", "755", "0644").
+// It accepts an optional "0o"/"0O" prefix and surrounding whitespace.
+func parseFileMode(s string, def fs.FileMode) (fs.FileMode, error) {
+	t := strings.TrimSpace(s)
+	t = strings.TrimPrefix(t, "0o")
+	t = strings.TrimPrefix(t, "0O")
+	if t == "" {
+		return def, fmt.Errorf("empty file mode")
+	}
+	v, err := strconv.ParseUint(t, 8, 32)
+	if err != nil {
+		return def, err
+	}
+	return fs.FileMode(v), nil
+}
+
 func getNextGID(groups []passwd.Group, isSystem bool) int {
 	log.WithFields(log.Fields{
 		"groups":   groups,
@@ -475,10 +491,11 @@ func feedByBootstrapConfigLinks(sysroot *sr.Sysroot, config Config) error {
 		return nil
 	}
 
-	// By default, UID and GID from own process.
-	uid, gid := syscall.Getuid(), syscall.Getgid()
-
 	for _, link := range config.Storage.Links {
+		// By default, UID and GID from own process.
+		// Reset on each iteration so a previous `owner` does not leak
+		// into the next entry when it has no explicit owner.
+		uid, gid := syscall.Getuid(), syscall.Getgid()
 		if link.Owner != nil {
 			uid, gid = getUIDGIDFromString(*link.Owner, sysroot.Groups, sysroot.Users)
 		}
@@ -512,22 +529,22 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 		return nil
 	}
 
-	// By default, UID and GID from own process.
-	uid, gid := syscall.Getuid(), syscall.Getgid()
-
 	for _, directory := range config.Storage.Directories {
+		// By default, UID and GID from own process.
+		// Reset on each iteration so a previous `owner` does not leak
+		// into the next entry when it has no explicit owner.
+		uid, gid := syscall.Getuid(), syscall.Getgid()
 		isOverwrite := common.Get(directory.Overwrite, false)
 
 		if directory.Owner != nil {
 			uid, gid = getUIDGIDFromString(*directory.Owner, sysroot.Groups, sysroot.Users)
 		}
 
-		var mode fs.FileMode = 0o775
+		mode := fs.FileMode(0o775)
 		if directory.Permissions != nil {
-			if valueAsInt, err := strconv.Atoi(*directory.Permissions); err != nil {
+			var err error
+			if mode, err = parseFileMode(*directory.Permissions, mode); err != nil {
 				return err
-			} else {
-				mode = fs.FileMode(valueAsInt)
 			}
 		}
 
@@ -548,17 +565,18 @@ func feedByBootstrapConfigDirectories(sysroot *sr.Sysroot, config Config) error 
 // TODO:
 //   - Fetch from HTTP when encoding is http
 //   - Fetch from HTTPS when encoding is https
-func getBytesFromEncoding(encoding *string, content *string) []byte {
-	if content != nil {
-		if encoding != nil && *encoding == "b64" {
-			if c, err := base64.StdEncoding.DecodeString(*content); err == nil {
-				return c
-			}
-		} else {
-			return []byte(*content)
-		}
+func getBytesFromEncoding(encoding *string, content *string) ([]byte, error) {
+	if content == nil {
+		return []byte{}, nil
 	}
-	return []byte{}
+	if encoding != nil && *encoding == "b64" {
+		c, err := base64.StdEncoding.DecodeString(*content)
+		if err != nil {
+			return nil, fmt.Errorf("cannot decode base64 content: %w", err)
+		}
+		return c, nil
+	}
+	return []byte(*content), nil
 }
 
 func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
@@ -572,28 +590,32 @@ func feedByBootstrapConfigFiles(sysroot *sr.Sysroot, config Config) error {
 		return nil
 	}
 
-	// By default, UID and GID from own process.
-	uid, gid := syscall.Getuid(), syscall.Getgid()
-
 	for _, file := range config.Storage.Files {
 		filename := file.Path
 		isOverwrite := common.Get(file.Overwrite, false)
 
-		if file.Permissions != nil {
-			uid, gid = getUIDGIDFromString(*file.Permissions, sysroot.Groups, sysroot.Users)
+		// By default, UID and GID from own process.
+		// Reset on each iteration so a previous `owner` does not leak
+		// into the next entry when it has no explicit owner.
+		uid, gid := syscall.Getuid(), syscall.Getgid()
+		if file.Owner != nil {
+			uid, gid = getUIDGIDFromString(*file.Owner, sysroot.Groups, sysroot.Users)
 		}
 
-		var mode fs.FileMode = 0o664
+		mode := fs.FileMode(0o664)
 		if file.Permissions != nil {
-			if valueAsInt, err := strconv.Atoi(*file.Permissions); err != nil {
+			var err error
+			if mode, err = parseFileMode(*file.Permissions, mode); err != nil {
 				log.Error(err)
 				return err
-			} else {
-				mode = fs.FileMode(valueAsInt)
 			}
 		}
 
-		content := getBytesFromEncoding(file.Encoding, file.Content)
+		content, err := getBytesFromEncoding(file.Encoding, file.Content)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
 
 		sysroot.Files = updateOrAppendFile(sysroot.Files, sr.File{
 			Overwrite: isOverwrite,

@@ -92,7 +92,7 @@ func FormatStdout(level LogLevel, msg string) string {
 	case LevelWarn:
 		sLevel = "\033[0;33mWARN\033[0m"
 	case LevelError:
-		sLevel = "\033[0;31mERROR\033[0m]"
+		sLevel = "\033[0;31mERROR\033[0m"
 	case LevelCritical:
 		sLevel = "\033[2;31mCRITICAL\033[0m"
 	case LevelAlert:

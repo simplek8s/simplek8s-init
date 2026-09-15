@@ -109,8 +109,15 @@ func GenerateShadowPassword(password string) (string, error) {
 
 	salt = fmt.Sprintf("$6$%s$", salt)
 
+	pwdBytes := []byte(password)
+	defer clear(pwdBytes)
+	saltBytes := []byte(salt)
+	defer clear(saltBytes)
+
 	crypter := sha512_crypt.New()
-	hash, err := crypter.Generate([]byte(password), []byte(salt))
+	hash, err := crypter.Generate(pwdBytes, saltBytes)
+	clear(pwdBytes)
+	clear(saltBytes)
 	if err != nil {
 		return "", fmt.Errorf("cannot generate hash: %w", err)
 	}

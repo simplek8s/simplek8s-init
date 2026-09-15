@@ -84,14 +84,20 @@ func CmdFn() error {
 		}
 
 		if pwd != pwd2 {
+			pwd = ""
+			pwd2 = ""
 			return errors.New("passwords do not match")
 		}
+		pwd2 = ""
 	} else {
 		return errors.New("cannot ask for a password because term is not available")
 	}
 
 	// Hash pwd.
 	hashed, err := generateshadow.GenerateShadowPassword(pwd)
+	// Best-effort: remove secrets from memory.
+	clear(stdin)
+	pwd = ""
 	if err != nil {
 		return err
 	}

@@ -16,8 +16,11 @@
 package mount
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"syscall"
 
 	"github.com/simplek8s/simplek8s-init/pkg/linux/blkid"
 
@@ -173,13 +176,24 @@ func Mount(mount MountPoint) error {
 	return nil
 }
 
-// Unmount unmounts target and removes the target (empty) directory.
+// Unmount unmounts target and removes the target directory when it is empty.
+// The removal is best-effort: if the directory is not empty (ex: a
+// pre-existing /dev, /proc or /sys) the unmount still succeeded, so no error
+// is returned in that case.
 func Unmount(target string, flags UnmountFlag) error {
 	if err := sysUnmount(target, int(flags)); err != nil {
 		return fmt.Errorf("cannot unmount %s: %w", target, err)
 	}
 
 	if err := os.Remove(target); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		// Ignore non-empty directories: unmount succeeded.
+		if errors.Is(err, syscall.ENOTEMPTY) ||
+			strings.Contains(err.Error(), "not empty") || strings.Contains(err.Error(), "not-empty") {
+			return nil
+		}
 		return fmt.Errorf("cannot remove (must be empty) directory %s: %w", target, err)
 	}
 

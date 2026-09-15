@@ -389,9 +389,16 @@ func TestUnmount_RemoveFails(t *testing.T) {
 		return nil
 	}
 
+	// Unmount succeeded, so a non-empty (pre-existing) directory must not
+	// turn into an error; it is simply kept in place.
 	err := Unmount(target, 0)
-	if err == nil {
-		t.Error("Unmount() expected error when os.Remove fails, got nil")
+	if err != nil {
+		t.Errorf("Unmount() expected nil when target is not empty, got %v", err)
+	}
+
+	// Verify directory was kept
+	if _, err := os.Stat(target); err != nil {
+		t.Error("non-empty target directory should have been kept")
 	}
 }
 

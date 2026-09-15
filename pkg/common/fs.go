@@ -31,8 +31,8 @@ func IsPathExists(path string) bool {
 	}).Trace("start")
 	defer log.Trace("end")
 
-	_, error := os.Stat(path)
-	return !errors.Is(error, os.ErrNotExist)
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // Returns true if path is a directory.
@@ -124,8 +124,8 @@ func CreateSymlink(path string, target string, overwrite bool, uid int, gid int,
 	}).Trace("start")
 	defer log.Trace("end")
 
-	// Overwrite?
-	if info, _ := os.Stat(path); info != nil {
+	// Overwrite? Use Lstat so dangling symlinks are detected.
+	if _, err := os.Lstat(path); err == nil {
 		if !overwrite {
 			// Don't overwrite exist file.
 			return nil
@@ -135,6 +135,8 @@ func CreateSymlink(path string, target string, overwrite bool, uid int, gid int,
 				return err
 			}
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 
 	// Create destination directory.
