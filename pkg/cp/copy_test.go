@@ -371,3 +371,123 @@ func Test_preserveOwnership_various_cases(t *testing.T) {
 		t.Fatalf("expected error when lchown fails")
 	}
 }
+
+func Test_CopyDir_preserves_special_bits(t *testing.T) {
+	installSafeMocks(t)
+	// PreserveAll enables timestamp preservation: point the
+	// (mocked) stat reader at fixed times.
+	getAccessModificationTimes = func(fi fs.FileInfo) ([]unix.Timeval, bool) {
+		return []unix.Timeval{{Sec: 1}, {Sec: 1}}, true
+	}
+
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	mkfile := func(name string, mode fs.FileMode) {
+		t.Helper()
+		p := filepath.Join(src, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkdir := func(name string, mode fs.FileMode) {
+		t.Helper()
+		p := filepath.Join(src, name)
+		if err := os.MkdirAll(p, mode); err != nil {
+			t.Fatal(err)
+		}
+		// MkdirAll keeps existing dirs untouched: enforce exact mode.
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mkfile("plain", 0755)
+	mkfile("suid", 0755|fs.ModeSetuid)
+	mkfile("sgid", 0755|fs.ModeSetgid)
+	mkdir("sub", 0755)
+	mkdir("sticky", 0755|fs.ModeSticky)
+
+	opt := &CopyOptions{Overwrite: true, PreserveAll: true}
+	if err := CopyDir(src, dst, opt); err != nil {
+		t.Fatalf("CopyDir failed: %v", err)
+	}
+
+	want := map[string]fs.FileMode{
+		"plain":  0755,
+		"suid":   0755 | fs.ModeSetuid,
+		"sgid":   0755 | fs.ModeSetgid,
+		"sub":    fs.ModeDir | 0755,
+		"sticky": fs.ModeDir | 0755 | fs.ModeSticky,
+	}
+	for name, w := range want {
+		st, err := os.Stat(filepath.Join(dst, name))
+		if err != nil {
+			t.Fatalf("missing %s: %v", name, err)
+		}
+		if got := st.Mode(); got != w {
+			t.Fatalf("%s mode = %v, want %v", name, got, w)
+		}
+	}
+}
+
+func Test_preserveMode_overrides_keep_special_bits(t *testing.T) {
+	td := t.TempDir()
+
+	f := filepath.Join(td, "f")
+	if err := os.WriteFile(f, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a 4755 source without touching the fixture mode.
+	fi = fakeFileInfo{name: "f", mode: 0755 | fs.ModeSetuid, size: 1}
+	opt := &CopyOptions{FilePerm: 0644}
+	if err := preserveMode(fi, f, opt); err != nil {
+		t.Fatalf("preserveMode failed: %v", err)
+	}
+	st, err := os.Stat(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := fs.FileMode(0644) | fs.ModeSetuid; st.Mode() != want {
+		t.Fatalf("mode = %v, want %v", st.Mode(), want)
+	}
+
+	d := filepath.Join(td, "d")
+	if err := os.MkdirAll(d, 0755); err != nil {
+		t.Fatal(err)
+	}
+	dfi := fakeFileInfo{name: "d", mode: fs.ModeDir | 0755 | fs.ModeSticky, isDir: true}
+	dopt := &CopyOptions{DirPerm: 0750}
+	if err := preserveMode(dfi, d, dopt); err != nil {
+		t.Fatalf("preserveMode dir failed: %v", err)
+	}
+	dst, err := os.Stat(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := fs.ModeDir | fs.FileMode(0750) | fs.ModeSticky; dst.Mode() != want {
+		t.Fatalf("dir mode = %v, want %v", dst.Mode(), want)
+	}
+}
+
+func Test_preserveMode_skips_special_files(t *testing.T) {
+	// No such dst on disk: a nil error proves no chmod was attempted.
+	fi := fakeFileInfo{name: "l", mode: fs.ModeSymlink | 0777}
+	if err := preserveMode(fi, filepath.Join(t.TempDir(), "nope"), &CopyOptions{}); err != nil {
+		t.Fatalf("symlinks must be skipped, got: %v", err)
+	}
+	fi = fakeFileInfo{name: "f", mode: fs.ModeDevice | 0600}
+	if err := preserveMode(fi, filepath.Join(t.TempDir(), "nope"), &CopyOptions{}); err != nil {
+		t.Fatalf("devices must be skipped, got: %v", err)
+	}
+}

@@ -67,10 +67,12 @@ type CopyOptions struct {
 	// Supports go:embed.
 	Fsys fs.FS
 	// Set the destionation directory mode (ex: 0o755).
-	// Set as 0 to copy perm from source.
+	// Set as 0 to copy perm from source. Special bits
+	// (setuid/setgid/sticky) are always preserved from source.
 	DirPerm fs.FileMode
 	// Set the destionation file mode (ex: 0o644).
-	// Set as 0 to copy perm from source.
+	// Set as 0 to copy perm from source. Special bits
+	// (setuid/setgid/sticky) are always preserved from source.
 	FilePerm fs.FileMode
 	// Set the destination user id owner.
 	// Set as -1 to copy from source.
@@ -280,6 +282,35 @@ func preserveOwnership(fi fs.FileInfo, dst string, opt *CopyOptions) error {
 	return nil
 }
 
+// preserveMode applies the source permission bits including the
+// special ones (setuid/setgid/sticky), which FileInfo.Perm()
+// strips. Symlinks, devices, fifos and sockets keep whatever
+// the creation path gave them (symlinks have no own mode on
+// Linux). Explicit DirPerm/FilePerm overrides replace the
+// rwxrwxrwx part but never drop special bits. It must run
+// after preserveOwnership: chown clears setuid/setgid.
+func preserveMode(fi fs.FileInfo, dst string, opt *CopyOptions) error {
+	mode := fi.Mode()
+	if mode&os.ModeSymlink != 0 || mode&os.ModeDevice != 0 ||
+		mode&os.ModeNamedPipe != 0 || mode&os.ModeSocket != 0 {
+		return nil
+	}
+	perm := mode.Perm()
+	if mode.IsDir() {
+		if opt.DirPerm != 0 {
+			perm = opt.DirPerm
+		}
+	} else if opt.FilePerm != 0 {
+		perm = opt.FilePerm
+	}
+	perm |= mode & (os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
+	if err := os.Chmod(dst, perm); err != nil {
+		log.WithFields(log.Fields{"dst": dst, "perm": perm}).Error(err)
+		return err
+	}
+	return nil
+}
+
 // Preserve atime and mtime.
 func preserveTimestamps(fi fs.FileInfo, dst string, opt *CopyOptions) error {
 	if !(opt.PreserveATime || opt.PreserveMTime) {
@@ -359,8 +390,12 @@ func copyEntry(srcPath string, src string, fi fs.FileInfo, dst string, opt *Copy
 		return err
 	}
 
-	// After writing, preserve metadata.
+	// After writing, preserve metadata (ownership first:
+	// chown clears setuid/setgid, so the mode goes last).
 	if err := preserveOwnership(fi, dst, opt); err != nil {
+		return err
+	}
+	if err := preserveMode(fi, dst, opt); err != nil {
 		return err
 	}
 	if err := preserveTimestamps(fi, dst, opt); err != nil {
