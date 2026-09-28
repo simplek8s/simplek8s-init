@@ -23,7 +23,6 @@ import (
 	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/mkpasswd"
 	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/simpleinit"
 	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/switchroot"
-	"github.com/simplek8s/simplek8s-init/internal/pkg/cmd/wizard"
 
 	"github.com/simplek8s/simplek8s-init/pkg/log"
 	"github.com/simplek8s/simplek8s-init/pkg/simplek8s"
@@ -40,7 +39,6 @@ var cmds = []struct {
 	options []string
 }{
 	{"init", simpleinit.CmdFn, simpleinit.CmdHelp, nil},
-	{"wizard", wizard.CmdFn, wizard.CmdHelp, nil},
 	{"mkpasswd", mkpasswd.CmdFn, mkpasswd.CmdHelp, mkpasswd.CmdOptions},
 	{"switchroot", switchroot.CmdFn, switchroot.CmdHelp, nil},
 }
