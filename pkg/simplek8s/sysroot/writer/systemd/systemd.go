@@ -16,12 +16,14 @@
 package systemd
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/simplek8s/simplek8s-init/pkg/common"
 	"github.com/simplek8s/simplek8s-init/pkg/linux/mount"
@@ -68,6 +70,33 @@ func ensureWriteFile(filename string, content []byte, mode fs.FileMode, uid int,
 func isCriticalMount(target string) bool {
 	clean := filepath.Clean("/" + strings.TrimPrefix(filepath.Clean(target), "/"))
 	return clean == "/var" || clean == "/etc"
+}
+
+// fsModuleHint explains a mount that failed with ENODEV: the initramfs
+// filesystem drivers are loadable modules, and loading them requires
+// /lib/modules to provide the exact running kernel version. Without this
+// hint the console only shows the bare "no such device", which is
+// indistinguishable from other failures.
+func fsModuleHint(err error) string {
+	if !errors.Is(err, syscall.ENODEV) {
+		return ""
+	}
+	release := "unknown"
+	if b, rerr := os.ReadFile("/proc/sys/kernel/osrelease"); rerr == nil {
+		release = strings.TrimSpace(string(b))
+	}
+	var sets []string
+	if entries, rerr := os.ReadDir("/lib/modules"); rerr == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				sets = append(sets, e.Name())
+			}
+		}
+	}
+	if len(sets) == 0 {
+		return fmt.Sprintf(" (kernel %s: no /lib/modules in initramfs, filesystem driver unavailable)", release)
+	}
+	return fmt.Sprintf(" (kernel %s; /lib/modules only provides: %s)", release, strings.Join(sets, ", "))
 }
 
 // Because of the next requirements, we are going to mount all
@@ -120,9 +149,11 @@ func writeMounts(mounts []mount.MountPoint, where string) ([]string, error) {
 		if err := mount.Mount(m); err != nil {
 			// Name source, target AND data: the kernel EINVAL alone
 			// never says which option the filesystem rejected.
-			msg := fmt.Sprintf("skip mount %s: cannot mount %s in %s (data %q): %v", origTarget, m.Source, m.Target, m.Data, err)
+			// On ENODEV, say why: missing/incompatible /lib/modules.
+			hint := fsModuleHint(err)
+			msg := fmt.Sprintf("skip mount %s: cannot mount %s in %s (data %q)%s: %v", origTarget, m.Source, m.Target, m.Data, hint, err)
 			if isCriticalMount(origTarget) {
-				return warnings, fmt.Errorf("cannot mount critical %s (%s in %s, data %q): %w", origTarget, m.Source, m.Target, m.Data, err)
+				return warnings, fmt.Errorf("cannot mount critical %s (%s in %s, data %q)%s: %w", origTarget, m.Source, m.Target, m.Data, hint, err)
 			}
 			log.Warn(msg)
 			warnings = append(warnings, msg)
