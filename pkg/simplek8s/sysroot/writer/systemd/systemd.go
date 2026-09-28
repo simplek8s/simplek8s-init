@@ -99,6 +99,23 @@ func fsModuleHint(err error) string {
 	return fmt.Sprintf(" (kernel %s; /lib/modules only provides: %s)", release, strings.Join(sets, ", "))
 }
 
+// deviceInventory summarizes the disk handles udev actually published, so a
+// mount source typo or an absent disk is visible in the error itself.
+func deviceInventory() string {
+	for _, dir := range []string{"/dev/disk/by-label", "/dev/disk/by-uuid"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) == 0 {
+			continue
+		}
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return fmt.Sprintf("%s provides: %s", dir, strings.Join(names, ", "))
+	}
+	return "no /dev/disk/by-label nor /dev/disk/by-uuid entries"
+}
+
 // Because of the next requirements, we are going to mount all
 // mountpoints in the initrd stage:
 //
@@ -137,6 +154,20 @@ func writeMounts(mounts []mount.MountPoint, where string) ([]string, error) {
 				warnings = append(warnings, msg)
 				continue
 			}
+		}
+
+		// Device sources must exist before mount(2), which otherwise only
+		// reports a bare ENOENT: tell a typo/missing disk (and list what IS
+		// present) apart from every other failure.
+		if m.Flags&mount.MountFlagBind == 0 && strings.HasPrefix(m.Source, "/dev/") && !common.IsPathExists(m.Source) {
+			err := fmt.Errorf("device %s does not exist (currently %s)", m.Source, deviceInventory())
+			if isCriticalMount(origTarget) {
+				return warnings, fmt.Errorf("cannot mount critical %s: %w", origTarget, err)
+			}
+			msg := fmt.Sprintf("skip mount %s: %v", origTarget, err)
+			log.Warn(msg)
+			warnings = append(warnings, msg)
+			continue
 		}
 
 		if strings.HasPrefix(m.Target, "/") {
