@@ -55,6 +55,21 @@ func PopulateDev() error {
 	return nil
 }
 
+// runUdevadm executes an 'udevadm' subcommand under the shared timeout.
+// On expiry it returns an explicit timeout (the exit status of a killed
+// child is meaningless); on real failures it wraps the underlying error.
+func runUdevadm(args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "/usr/bin/udevadm", args...).Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("udevadm %v timed out after %s", args, timeout)
+		}
+		return fmt.Errorf("udevadm %v failed: %w", args, err)
+	}
+	return nil
+}
+
 func populateDev() error {
 	// systemd-udevd requires /dev, /sys, and /proc.
 	if !common.IsPathExists("/dev/kmsg") {
@@ -92,14 +107,10 @@ func populateDev() error {
 
 	// Trigger events (udevadm trigger/settle) with timeouts so a
 	// hung udevadm cannot block PID 1 forever.
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "/usr/bin/udevadm", "trigger", "--action=add").Run(); err != nil {
+	if err := runUdevadm("trigger", "--action=add"); err != nil {
 		return fmt.Errorf("cannot trigger udev events: %w", err)
 	}
-	ctx, cancel = context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "/usr/bin/udevadm", "settle").Run(); err != nil {
+	if err := runUdevadm("settle"); err != nil {
 		return fmt.Errorf("cannot settle udev events: %w", err)
 	}
 
